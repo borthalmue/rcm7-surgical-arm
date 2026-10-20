@@ -1,0 +1,79 @@
+part,type,vendor,qty,description,est_mass_g,files
+304 SS 8 x 0.7 tube,catalog,tube stock,1,"Instrument shaft, 430 mm to wrist axis W",98.2,instrument_shaft
+316 SS 12 x 0.875 tube,catalog,tube stock,1,"Cannula, remote-center band 90 mm below clamp",51.4,cannula
+AT3 20T pulley 10 mm,catalog,Gates / MISUMI,3,"Belt-1 pulley, keyed to stationary shaft (ground side)",5.4,pulley_1a_O;pulley_2a_A;pulley_2b_C
+AT3 20T pulley 10 mm (17 bore),catalog,Gates / MISUMI,1,Belt-1 pulley keyed to coupler-1 sleeve at A,2.0,pulley_1b_A
+BF10 support,catalog,TBI / generic,1,"Floating-end support, 6000ZZ",51.6,screw_BF10
+BK10 support,catalog,TBI / generic,1,"Fixed-end support, 7000 angular pair",131.0,screw_BK10
+Bosch BMI088 board,catalog,,3,IMU on coupler 1: must stay level relative to yaw frame (parallelogram-1 integrity),1.1,imu_coupler1;imu_link1;imu_spar
+"Gates AT3 steel-cord PU belt, 10 mm",catalog,Gates,1,Belt 1 (carried by link 1): backs up bar O'A' in parallelogram 1,6.9,belt_1
+"Gates AT3 steel-cord PU belt, 9 mm",catalog,Gates,1,Belt 2 (carried by coupler 1): backs up bar EF in parallelogram 2,16.9,belt_2
+Gates HTD 3M-6 belt,catalog,Gates,1,Input belt (inside guard),3.0,pitch_input_belt
+HD CSF-17-100-2UH,catalog,Harmonic Drive,2,"Yaw strain-wave gear unit, 100:1, OD79 x 45",308.8,yaw_harmonic;yaw_hd_output
+HD SHG-17-100-2UH,catalog,Harmonic Drive,1,"Pitch hollow-shaft strain-wave unit, 100:1, OD84 x 56.5, 19 mm bore",711.9,pitch_harmonic
+HIWIN MGN12H,catalog,HIWIN,1,Carriage block 27 x 45.4 x 13,96.8,mgn12h_block
+HIWIN MGNR12R-375,catalog,HIWIN,1,"Linear rail 12 x 8, 375 mm",283.6,rail_MGN12
+HTD 3M 20T pulley,catalog,,1,"Motor pulley, 2:1 pre-reduction",5.5,pitch_motor_pulley
+HTD 3M 40T pulley,catalog,,1,Wave-generator input pulley (hollow),15.8,pitch_input_pulley
+Kendrion Servo Slim Line 04,catalog,Kendrion,1,Insertion spring-applied brake 0.4 Nm (>600 N at carriage),67.8,insertion_brake
+Kendrion Servo Slim Line 05,catalog,Kendrion,2,"Yaw spring-applied brake, 0.7 Nm (70 Nm at joint)",122.2,yaw_brake;pitch_brake
+Kendrion manual release,catalog,Kendrion,1,Manual brake-release lever,2.9,pitch_brake_release
+M6 standoff,catalog,,2,Rear-bracket standoff,3.7,pitch_standoff_1;pitch_standoff_2
+MISUMI CBRS12 (mod.),catalog,MISUMI,6,"Shoulder pin O', fixed in pitch frame",46.0,pin_Op;pin_A;pin_E;pin_Ap;pin_C;pin_F
+McMaster 9541K bumper,catalog,McMaster-Carr,2,Pitch hard stop at +46.0 deg,1.1,pitch_hardstop_1;pitch_hardstop_2
+RLS AksIM-2 MB049,catalog,RLS,1,Pitch joint-side absolute encoder readhead (channel B),5.4,pitch_readhead
+RLS AksIM-2 MB053,catalog,RLS,1,Yaw joint-side absolute encoder readhead (channel B),6.6,yaw_readhead
+RLS LM10 magnetic scale,catalog,RLS,1,Insertion joint-side encoder scale (channel B),9.0,insertion_scale
+RLS MRA049BC025,catalog,RLS,1,Pitch encoder ring 25x49x2,5.6,link1_enc_ring
+RLS MRA053BC030,catalog,RLS,1,Yaw encoder ring 30x53x2,6.0,yaw_enc_ring
+Ruland MCLX-6-6,catalog,Ruland,1,Clamp coupling,8.4,screw_coupling
+SKF 6801-2RS,catalog,SKF,13,Link 1 front bearing on stationary shaft,9.2,brg_L1_O_front;brg_OpAp_back_0;brg_OpAp_back_300;brg_OpAp_front_0;brg_OpAp_front_300;brg_C1_back_0;brg_C1_back_420;brg_C1_front_0;brg_C1_front_420;brg_C2_back_0;brg_C2_back_420;brg_C2_front_0;brg_C2_front_420
+SKF 6803-2RS,catalog,SKF,1,Link 1 front bearing on coupler-1 sleeve (17x26x5),12.0,brg_L1_A_front
+TBI SFU1204,catalog,TBI Motion,1,"Ball screw 12 mm, 4 mm lead (back-drivable)",376.4,ballscrew_SFU1204
+TBI SFU1204 nut,catalog,TBI Motion,1,Ball nut,22.7,ball_nut
+THK RB5013,catalog,THK,2,Yaw crossed-roller bearing 50x80x13 (outer ring),154.9,yaw_xrb_outer;yaw_xrb_inner
+maxon DCX 16 + GPX 16,catalog,maxon,4,Roll drive motor,19.2,isa_motor_1;isa_motor_2;isa_motor_3;isa_motor_4
+maxon EC 45 flat 50W,catalog,maxon,3,Yaw motor,75.7,yaw_motor;pitch_motor;insertion_motor
+maxon MILE 1024,catalog,maxon,3,Yaw motor-side encoder (channel A),31.0,yaw_motor_enc;pitch_motor_enc;insertion_motor_enc
+MACH-101,machined,in-house,1,"Yaw housing, 6061",1121.9,yaw_housing
+MACH-102,machined,in-house,1,Yaw end cap,137.4,yaw_end_cap
+MACH-103,machined,in-house,2,"Yaw hard stop on housing face, +/-75 deg",0.4,yaw_hardstop_1;yaw_hardstop_2
+MACH-104,machined,in-house,1,Setup-arm clamp saddle,231.7,setup_saddle
+MACH-105,machined,in-house,1,Setup-arm beam (to cart / bed rail),1096.4,setup_beam
+MACH-106,machined,in-house,1,Setup column (down to cart / bed-rail clamp),4111.7,setup_column
+MACH-201,machined,in-house,1,Yaw output shaft,39.0,yaw_output_shaft
+MACH-202,machined,in-house,1,Yaw stop dog,0.4,yaw_stop_dog
+MACH-203,machined,in-house,1,"Yaw yoke, 10 mm 6061",291.6,yoke
+MACH-204,machined,in-house,2,"Yoke gusset, 6 mm",37.3,yoke_gusset_L;yoke_gusset_R
+MACH-205,machined,in-house,1,"Pitch frame, 12 mm 6061. Carries O and O'.",673.7,pitch_frame
+MACH-206,machined,in-house,1,Counterbalance post,63.9,spring_post
+MACH-207,machined,in-house,1,Counterbalance arm,49.9,spring_arm
+MACH-208,machined,in-house,1,Spring anchor G (above O),2.4,spring_anchor_G
+MACH-209,machined,in-house,1,"Rear bracket: anchors stationary shaft, carries motor",173.0,pitch_rear_bracket
+MACH-210,machined,in-house,1,Stationary shaft through hollow gear: carries belt-1 ground pulley,128.4,pitch_ground_shaft
+MACH-301,machined,in-house,2,"Link 1 plate, 6 mm 6061, holes 300/550",405.6,link1_plate_back;link1_plate_front
+MACH-302,machined,in-house,1,Link 1 drive hub (bolts to hollow gear output),37.2,link1_hub
+MACH-303,machined,in-house,1,Hub spacer between plates,41.7,link1_hub_tube
+MACH-304,machined,in-house,6,Plate spacer,36.3,link1_spacer_55;link1_spacer_358;linkOpAp_spacer;spar_spacer_176;spar_spacer_-130;spar_spacer_-196
+MACH-305,machined,in-house,1,Counterbalance stud K,9.8,spring_stud_K
+MACH-401,machined,in-house,2,"Link O'A' plate, 6 mm 6061, holes 300",227.3,linkOpAp_plate_back;linkOpAp_plate_front
+MACH-501,machined,in-house,2,"Coupler 1 wall, 5 mm 6061, holes 130/420",259.1,coupler1_wall_back;coupler1_wall_front
+MACH-502,machined,in-house,4,Coupler 1 side web,82.6,coupler1_rail_L;coupler1_rail_R;coupler2_rail_L;coupler2_rail_R
+MACH-503,machined,in-house,1,"Coupler-1 sleeve, concentric with pin A, through link-1 front plate",19.4,sleeve_A
+MACH-601,machined,in-house,2,"Coupler 2 wall, 5 mm 6061, holes 420",260.7,coupler2_wall_back;coupler2_wall_front
+MACH-701,machined,in-house,2,"Spar plate, 6 mm 6061, holes 0/250, 210 mm extension",348.8,spar_plate_back;spar_plate_front
+MACH-702,machined,in-house,2,Insertion hard stop (rail clamp),0.5,insertion_stop_-40;insertion_stop_180
+MACH-703,machined,in-house,2,Ball-screw support bracket,28.2,screw_bracket_-202;screw_bracket_196
+MACH-704,machined,in-house,1,Insertion motor plate,14.0,insertion_motor_plate
+MACH-705,machined,in-house,1,Manual retraction knob (screw is back-drivable),7.8,retraction_knob
+MACH-706,machined,in-house,1,Cannula mount,82.2,cannula_mount
+MACH-707,machined,in-house,1,Cannula clamp ring,20.2,cannula_clamp
+MACH-708,machined,in-house,1,RCM band: align with incision,0.3,cannula_rcm_band
+MACH-801,machined,in-house,1,Carriage adapter plate,43.2,carriage_plate
+MACH-802,machined,in-house,1,Ball-nut bracket,6.9,nut_bracket
+MACH-803,machined,in-house,1,Instrument drive (4 cable-drive outputs),252.3,isa_housing
+MACH-804,machined,in-house,1,Instrument quick-release (manual removal),3.8,instrument_release
+MACH-901,machined,in-house,1,Roll hub (inside drive),6.6,instrument_roll_hub
+MACH-902,machined,in-house,1,"Wrist link, pitch pin at W, yaw pin at J (9 mm)",2.7,wrist_clevis
+MACH-903,machined,in-house,1,Jaw pin J,0.1,wrist_yaw_pin
+MACH-904,machined,in-house,2,Jaw (upper),0.5,jaw_1;jaw_2

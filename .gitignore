@@ -1,0 +1,5 @@
+generator/out/
+generator/views/
+__pycache__/
+*.pyc
+.DS_Store

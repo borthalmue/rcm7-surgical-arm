@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interactive simulator of RCM-7, a 7-DOF remote-center-of-motion arm for minimally invasive surgery.">
+<meta property="og:title" content="RCM-7 Simulator">
+<meta property="og:description" content="Drive all seven joints of a fault-tolerant surgical arm in the browser.">
+<meta property="og:image" content="images/overall.png">
+<script>if (/[?&]embed\b/.test(location.search) || location.hash === '#embed') document.documentElement.classList.add('embed-mode');</script>
+<title>RCM-7 Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: control-room simulator. Large 3D stage with HUD; right column is the pendant (joints, tip jog, presets,
+   faults, telemetry); verification, fault matrix and catalog BOM follow below. */
+:root{
+  --paper:#eef1f3; --panel:#f8fafb; --scene:#e4e9ec; --ink:#1c2a33; --muted:#5a6a75; --rule:#cbd4da;
+  --steel:#3d5a6a; --accent:#d4470f; --ok:#2c7a4b; --warn:#a86a00; --bad:#b42318; --chip:#e6ecef;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#10171b; --panel:#172127; --scene:#121b20; --ink:#e2e9ed; --muted:#93a3ad; --rule:#2c3a42;
+  --steel:#9ab6c6; --accent:#ff7a3d; --ok:#5cc48a; --warn:#e3a33a; --bad:#ff6b5e; --chip:#1e2b32; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#10171b; --panel:#172127; --scene:#121b20; --ink:#e2e9ed; --muted:#93a3ad; --rule:#2c3a42;
+  --steel:#9ab6c6; --accent:#ff7a3d; --ok:#5cc48a; --warn:#e3a33a; --bad:#ff6b5e; --chip:#1e2b32; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1440px;margin:0 auto;padding-block:18px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:20px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 24px;border-bottom:1.5px solid var(--ink);padding-bottom:10px}
+h1{font-family:var(--f-display);font-weight:600;font-size:2.2rem;letter-spacing:.02em;margin:0;line-height:1}
+h2{font-family:var(--f-display);font-weight:600;font-size:1.35rem;letter-spacing:.04em;text-transform:uppercase;margin:0 0 10px}
+.sheet{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.lede{margin:0;max-width:78ch;color:var(--muted)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:18px;align-items:start}
+@media (max-width:1000px){.main{grid-template-columns:minmax(0,1fr)}}
+.stage{position:sticky;top:max(10px,env(safe-area-inset-top,0px));background:var(--scene);border:1px solid var(--rule);min-width:0;overflow:hidden}
+@media (max-width:1000px){.stage{position:relative;top:0}}
+#view{display:block;width:100%;height:min(76vh,760px);min-height:360px;touch-action:none;cursor:grab}
+.cap{position:absolute;left:10px;top:8px;font-family:var(--f-mono);font-size:.68rem;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;pointer-events:none}
+.hud{position:absolute;right:10px;top:8px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none}
+.hud span{font-family:var(--f-mono);font-size:.76rem;background:var(--panel);border:1px solid var(--rule);padding:3px 8px;font-variant-numeric:tabular-nums}
+.tag{position:absolute;transform:translate(-50%,-140%);font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--ink);background:var(--panel);border:1px solid var(--rule);padding:0 4px;pointer-events:none;white-space:nowrap}
+.tag.r{color:var(--accent);border-color:var(--accent)}
+.toolbar{position:absolute;left:10px;bottom:10px;right:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.toolbar .sp{flex:1}
+.kbd{font-family:var(--f-mono);font-size:.68rem;color:var(--muted);background:var(--panel);border:1px solid var(--rule);padding:2px 6px}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--ink)}
+.tabs button{border:0;border-right:1px solid var(--ink);background:transparent;padding:7px 0;font-weight:600}
+.tabs button:last-child{border-right:0}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.pane{display:flex;flex-direction:column;gap:12px}
+fieldset{border:1px solid var(--rule);background:var(--panel);margin:0;padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+legend{font-family:var(--f-display);font-weight:600;font-size:1rem;letter-spacing:.06em;text-transform:uppercase;padding:0 6px}
+.jrow{display:grid;grid-template-columns:1fr auto;grid-template-areas:"name val" "ctl ctl";gap:2px 8px;padding:6px 6px 8px;border:1px solid transparent;cursor:pointer}
+.jrow.sel{border-color:var(--accent);background:var(--chip)}
+.jrow .nm{grid-area:name;font-size:.82rem;font-weight:500;display:flex;gap:6px;align-items:baseline}
+.jrow .nm i{font-style:normal;font-family:var(--f-mono);font-size:.68rem;color:var(--muted)}
+.jrow .val{grid-area:val;font-family:var(--f-mono);font-size:.76rem;font-variant-numeric:tabular-nums;text-align:right;color:var(--muted)}
+.jrow .val b{color:var(--ink);font-weight:500}
+.jrow .ctl{grid-area:ctl;display:grid;grid-template-columns:auto 1fr auto 64px;gap:6px;align-items:center}
+.jrow input[type=range]{width:100%;accent-color:var(--steel);min-width:0}
+.jrow input[type=number]{width:64px;font:inherit;font-family:var(--f-mono);font-size:.76rem;padding:2px 4px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)}
+.jog{width:26px;height:24px;padding:0;font-family:var(--f-mono);font-weight:600;line-height:1}
+.jrow.locked .nm,.jrow.locked .val b{color:var(--muted)}
+.bar{grid-area:ctl;height:3px;background:var(--rule);position:relative;margin-top:28px;pointer-events:none;display:none}
+button{font:inherit;font-size:.82rem;font-weight:500;padding:5px 11px;border:1px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+button.primary{background:var(--ink);color:var(--paper)}
+button:disabled,input:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pad button{padding:8px 0;font-family:var(--f-mono);font-size:.78rem}
+.pad .lbl{grid-column:1/-1;font-size:.76rem;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;font-size:.8rem;flex-wrap:wrap}
+.row select{font:inherit;font-size:.8rem;padding:3px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)}
+.checks{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;font-size:.8rem}
+.checks label{display:flex;gap:6px;align-items:center;cursor:pointer}
+.fault{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:start;font-size:.83rem;padding:6px 0;border-top:1px solid var(--rule)}
+.fault:first-of-type{border-top:0}
+.fault input{margin-top:3px;accent-color:var(--bad)}
+.fault small{grid-column:2;color:var(--muted);font-size:.74rem;line-height:1.35}
+dl.ro{display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin:0;font-size:.8rem}
+dl.ro dt{color:var(--muted)} dl.ro dd{margin:0;font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+dl.ro .hd{grid-column:1/-1;font-family:var(--f-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-top:1px solid var(--rule);padding-top:6px;margin-top:4px}
+dl.ro .hd:first-child{border-top:0;margin-top:0;padding-top:0}
+.paths{display:flex;flex-direction:column;gap:6px}
+.path{display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:.8rem;align-items:center}
+.path .sub{grid-column:1/-1;font-size:.73rem;color:var(--muted)}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:.68rem;padding:1px 7px;border:1px solid currentColor;letter-spacing:.04em;white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)}
+.banner{font-size:.8rem;padding:7px 10px;border:1px solid var(--rule);background:var(--panel)}
+.banner.warn{border-color:var(--warn);color:var(--warn)} .banner.bad{border-color:var(--bad);color:var(--bad)}
+.tblwrap{overflow-x:auto;background:var(--panel);border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:.83rem}
+th,td{text-align:left;padding:7px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--f-mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;white-space:nowrap}
+td.k{font-family:var(--f-mono);font-weight:500;white-space:nowrap}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.fm{min-width:820px} .bom{min-width:760px} .mv{min-width:700px}
+.verify{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule)}
+.verify div{background:var(--panel);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.verify b{font-family:var(--f-mono);font-size:1.05rem;font-weight:500;font-variant-numeric:tabular-nums}
+.verify span{font-size:.78rem;color:var(--muted)}
+.note{font-size:.76rem;color:var(--muted);margin:0}
+</style>
+
+<style>
+[hidden]{display:none!important}
+body{margin:0}
+img{max-width:100%}
+/* ?embed: just the stage and the control pendant, for iframes */
+body.embed .wrap{padding-block:0;gap:0;max-width:none}
+body.embed .wrap>header, body.embed .lede, body.embed section{display:none}
+body.embed .stage{position:relative;top:0}
+body.embed #view{height:calc(100vh - 2px);min-height:420px}
+@media (max-width:1000px){ body.embed #view{height:62vh} }
+</style>
+</head>
+<body>
+<script>if (document.documentElement.classList.contains('embed-mode')) document.body.classList.add('embed');</script>
+
+
+<div class="wrap">
+  <header>
+    <h1>RCM-7 Simulator</h1>
+    <span class="sheet">129 CAD parts · 7 driven joints · units mm</span>
+  </header>
+  <p class="lede">Drive the arm the way a controller would. Every joint has a motor with a speed and acceleration limit, so commands are followed, not teleported. Every internal part moves at its real ratio: the gear rotors, the ball screw, the pulleys and both redundant belts, and the counterbalance spring. The remote center R stays fixed through all of it.</p>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <canvas id="view" aria-label="3D simulation of the RCM-7 arm"></canvas>
+      <span class="cap">Drag to orbit · scroll to zoom · right-drag to pan</span>
+      <div class="hud"><span id="hud-rcm">RCM error —</span><span id="hud-state">Nominal</span><span id="hud-sel">Selected: pitch</span></div>
+      <div id="tags"></div>
+      <div class="toolbar">
+        <button id="demo" class="primary" type="button">Run demo</button>
+        <button id="estop" type="button" style="border-color:var(--bad);color:var(--bad)">Stop</button>
+        <button id="fit" type="button">Reset view</button>
+        <span class="sp"></span>
+        <span class="kbd">1–7 select · ← → jog · Shift fast</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="joints" type="button">Joints</button>
+        <button role="tab" aria-selected="false" data-tab="tip" type="button">Tip</button>
+        <button role="tab" aria-selected="false" data-tab="faults" type="button">Faults</button>
+        <button role="tab" aria-selected="false" data-tab="data" type="button">Telemetry</button>
+      </div>
+
+      <div class="pane" data-pane="joints">
+        <fieldset id="jointbox"><legend>Joint commands</legend></fieldset>
+        <div class="banner warn" id="interlock" hidden></div>
+        <fieldset>
+          <legend>Motion</legend>
+          <div class="row"><label for="speed">Speed</label><select id="speed"><option value="0.25">25 %</option><option value="0.5">50 %</option><option value="1" selected>100 %</option><option value="2">200 %</option></select>
+            <button id="holdAll" type="button">Hold here</button></div>
+          <div class="checks">
+            <label><input id="showTags" type="checkbox" checked> Pivot labels</label>
+            <label><input id="showAxes" type="checkbox" checked> Axes</label>
+            <label><input id="showBody" type="checkbox" checked> Patient wall</label>
+            <label><input id="xray" type="checkbox"> X-ray couplers</label>
+            <label><input id="trace" type="checkbox" checked> Tip trace</label>
+            <label><input id="ghost" type="checkbox" checked> Target ghost</label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="pane" data-pane="tip" hidden>
+        <fieldset>
+          <legend>Tip jog (inverse kinematics)</legend>
+          <div class="pad" id="pad">
+            <span class="lbl">Hold a button to move the wrist point. Yaw, pitch and insertion are solved about R.</span>
+            <button data-c="y+" type="button">Up</button><button data-c="z-" type="button">Away</button><button data-c="x+" type="button">Right</button>
+            <button data-c="x-" type="button">Left</button><button data-c="z+" type="button">Toward</button><button data-c="y-" type="button">Down</button>
+            <button data-c="q+" type="button">Insert</button><button data-c="q-" type="button">Withdraw</button><button data-c="r+" type="button">Roll ↻</button>
+          </div>
+          <div class="row"><label for="tipspeed">Tip speed</label><select id="tipspeed"><option value="10">10 mm/s</option><option value="25" selected>25 mm/s</option><option value="50">50 mm/s</option></select></div>
+          <dl class="ro"><dt>Wrist point W from R</dt><dd id="t-w"></dd><dt>Reach limit</dt><dd id="t-lim">—</dd></dl>
+        </fieldset>
+        <fieldset>
+          <legend>Pose presets</legend>
+          <div class="btns" id="presets"></div>
+          <p class="note">Retracting below 55 mm straightens the wrist first, then withdraws, so the jaws never articulate inside the cannula.</p>
+        </fieldset>
+      </div>
+
+      <div class="pane" data-pane="faults" hidden>
+        <fieldset>
+          <legend>Inject a fault</legend>
+          <label class="fault"><input type="checkbox" data-fault="opap"><span>Link O′A′ fractures</span><small>Bar path of parallelogram 1. Belt 1 on link 1 takes over.</small></label>
+          <label class="fault"><input type="checkbox" data-fault="belt1"><span>Belt 1 snaps</span><small>Belt path of parallelogram 1. Link O′A′ takes over.</small></label>
+          <label class="fault"><input type="checkbox" data-fault="c2"><span>Coupler EF fractures</span><small>Bar path of parallelogram 2. Belt 2 on coupler 1 takes over.</small></label>
+          <label class="fault"><input type="checkbox" data-fault="belt2"><span>Belt 2 snaps</span><small>Belt path of parallelogram 2. Coupler EF takes over.</small></label>
+          <label class="fault"><input type="checkbox" data-fault="slip"><span>Pitch input belt slips</span><small>Motor encoder A drifts from joint encoder B. Trip at 0.25°.</small></label>
+          <label class="fault"><input type="checkbox" data-fault="power"><span>Power loss</span><small>Spring-applied brakes engage on every powered joint.</small></label>
+          <div class="btns"><button id="clearFaults" type="button">Clear faults and reset</button></div>
+        </fieldset>
+        <fieldset><legend>Constraint paths</legend><div class="paths" id="paths"></div></fieldset>
+      </div>
+
+      <div class="pane" data-pane="data" hidden>
+        <fieldset>
+          <legend>Telemetry</legend>
+          <dl class="ro" id="tele"></dl>
+        </fieldset>
+        <p class="note">Torques use each part's modelled mass and centre of mass. Motor speeds use the real ratios: yaw 100:1, pitch 2:1 belt × 100:1, insertion 4 mm lead.</p>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>What moves, and how</h2>
+    <div class="tblwrap"><table class="mv">
+      <thead><tr><th>Part</th><th>Driven by</th><th>Relation</th></tr></thead>
+      <tbody>
+        <tr><td>Link 1, link O′A′</td><td>Pitch θ</td><td>Rotate θ about O and O′</td></tr>
+        <tr><td>Couplers 1 and EF</td><td>Pitch θ</td><td>Translate only (stay parallel to the baseline)</td></tr>
+        <tr><td>Spar, rail, cannula</td><td>Pitch θ</td><td>Rotate θ about the virtual axis through R</td></tr>
+        <tr><td>Whole arm below the yaw yoke</td><td>Yaw φ</td><td>Rotates about the baseline axis through R</td></tr>
+        <tr><td>Yaw motor rotor</td><td>Yaw φ</td><td>100 × φ</td></tr>
+        <tr><td>Pitch motor rotor and pulley</td><td>Pitch θ</td><td>200 × θ (2:1 belt into 100:1 hollow gear)</td></tr>
+        <tr><td>Wave-generator input pulley</td><td>Pitch θ</td><td>100 × θ</td></tr>
+        <tr><td>Belt 1 (on link 1)</td><td>Pitch θ</td><td>Surface travels −9.55 mm per radian, relative to link 1</td></tr>
+        <tr><td>Belt 2 (in coupler 1)</td><td>Pitch θ</td><td>Surface travels +9.55 mm per radian, relative to coupler 1</td></tr>
+        <tr><td>Ball screw, coupling, knob</td><td>Insertion q</td><td>90° per mm (4 mm lead)</td></tr>
+        <tr><td>Carriage and instrument drive</td><td>Insertion q</td><td>Translate along the shaft axis</td></tr>
+        <tr><td>Instrument drive rotors</td><td>Roll, wrist pitch, wrist yaw, grip</td><td>30 × each joint</td></tr>
+        <tr><td>Counterbalance spring</td><td>Pitch θ, yaw φ</td><td>Stretches between anchor G and stud K</td></tr>
+        <tr><td>Shaft, wrist, jaws</td><td>Roll ρ, ψ, χ, γ</td><td>Roll about the shaft axis, then pitch at W, then yaw ± γ/2 at J</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Verification</h2>
+    <div class="verify" id="verify"></div>
+  </section>
+
+  <section>
+    <h2>Fault matrix</h2>
+    <div class="tblwrap"><table class="fm">
+      <thead><tr><th>Failure</th><th>Detected by</th><th>Automatic response</th><th>Effect on remote center</th></tr></thead>
+      <tbody>
+        <tr><td>Link O′A′ fractures</td><td>Continuity trace, then coupler-1 IMU tilt</td><td>Warning, speed limit, finish and retract</td><td>None. Belt 1 holds coupler 1 level.</td></tr>
+        <tr><td>Belt 1 snaps</td><td>Belt cord continuity</td><td>Warning, speed limit</td><td>None. Link O′A′ holds coupler 1 level.</td></tr>
+        <tr><td>Coupler EF fractures</td><td>Continuity trace, then spar vs link-1 IMU mismatch</td><td>Warning, speed limit</td><td>None. Belt 2 keeps the spar parallel.</td></tr>
+        <tr><td>Belt 2 snaps</td><td>Belt cord continuity</td><td>Warning, speed limit</td><td>None. Coupler EF keeps the spar parallel.</td></tr>
+        <tr><td>Both paths of one parallelogram</td><td>IMU orientation monitor (&gt;0.1°)</td><td>Controlled stop, brakes engage</td><td>R is lost. Shown in the simulator.</td></tr>
+        <tr><td>Power loss</td><td>Supply monitor</td><td>Spring-applied brakes: yaw 70 N·m, pitch 140 N·m, insertion &gt;560 N</td><td>None. Pose held.</td></tr>
+        <tr><td>Belt or coupling slip in a drive</td><td>Motor encoder vs joint absolute encoder</td><td>Trip at 0.25°, controlled stop</td><td>None.</td></tr>
+        <tr><td>Strain-wave flexspline fails</td><td>Encoder disagreement</td><td>Stop. Counterbalance limits pitch load to ≤6.6 N·m; hard stops catch it</td><td>None. R is mechanical.</td></tr>
+        <tr><td>Wrist articulates inside cannula</td><td>Insertion interlock</td><td>Wrist and grip locked until q ≥ 55 mm; retraction straightens first</td><td>None.</td></tr>
+        <tr><td>Over-travel</td><td>Soft limits, then hard stops</td><td>Pitch −52/+46°, yaw ±75.6°, insertion 12–181 mm</td><td>Parallelograms stay ≥13 mm from flattening.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Catalog parts</h2>
+    <div class="tblwrap"><table class="bom">
+      <thead><tr><th>Part</th><th>Vendor</th><th>Qty</th><th>Used for</th><th style="text-align:right">Est. mass</th></tr></thead>
+      <tbody id="bom"></tbody>
+    </table></div>
+  </section>
+</div>
+
+<script src="assets/rcm7-data.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(()=>{
+const DATA = window.RCM7_DATA;
+const MT = DATA.meta, D2R = Math.PI/180;
+const el = id => document.getElementById(id);
+const V3 = (x,y,z) => new THREE.Vector3(x,y,z);
+const beta = MT.beta*D2R, ZI = MT.ZI, L1 = MT.L1, Mlen = MT.M, n = MT.n, Q0 = MT.Q0;
+const b3 = V3(Math.cos(beta), -Math.sin(beta), 0), R3 = V3(0,0,ZI);
+const O = MT.O, Op = MT.Op, W0 = V3(...MT.W0), J0 = V3(...MT.J0);
+const A0 = [O[0], O[1]+L1], E0 = [O[0], O[1]+L1+Mlen], C0 = [0, L1], F0 = [0, L1+Mlen], Ap0 = [Op[0], Op[1]+L1];
+
+// ---------------- renderer / scene
+const canvas = el('view');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({canvas, antialias:true}); }
+catch(e){ el('hud-state').textContent = 'WebGL is not available in this browser'; return; }
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1.6, 5, 20000);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+const VIEW_T = V3(-250, 185, -40), VIEW_D = V3(-930, 490, 1420);
+let userMoved = false;
+function fitView(){
+  const asp = Math.max(0.5, canvas.clientWidth/Math.max(1, canvas.clientHeight));
+  camera.position.copy(VIEW_T).addScaledVector(VIEW_D, Math.max(1, 1.3/asp)); controls.target.copy(VIEW_T); controls.update();
+}
+fitView();
+controls.addEventListener('start', () => { userMoved = true; });
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9096, 0.75));
+const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(-600, 1200, 900); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.35); fill.position.set(900, 300, -900); scene.add(fill);
+
+const MATDEF = {alu:[0xc9ced3,.55,.38], alu2:[0x8a929b,.5,.42], steel:[0xbcc1c7,.85,.24], black:[0x2b2e33,.25,.6],
+  red:[0xb33a2c,.3,.5], pcb:[0x2f7a52,.1,.6], belt:[0x1d1e20,0,.9], stop:[0xe48a1a,.1,.55], white:[0xe9e7e1,0,.7], mark:[0xffb21f,.1,.4]};
+const MAT = {}; for (const k in MATDEF){ const [c,me,ro]=MATDEF[k]; MAT[k]=new THREE.MeshStandardMaterial({color:c, metalness:me, roughness:ro}); }
+MAT.mark.emissive = new THREE.Color(0x553300);
+const XRAY = new THREE.MeshStandardMaterial({color:0x8a929b, metalness:.3, roughness:.5, transparent:true, opacity:.18, depthWrite:false});
+const FAILMAT = new THREE.MeshStandardMaterial({color:0xd8342a, metalness:.1, roughness:.6, transparent:true, opacity:.22, depthWrite:false});
+const BRAKEON = new THREE.MeshStandardMaterial({color:0xff4a2a, emissive:0x8a1508, metalness:.3, roughness:.4});
+const GHOSTMAT = new THREE.MeshBasicMaterial({color:0x3d7fae, transparent:true, opacity:.28, depthWrite:false});
+
+function b64(s, Type){ const bin = atob(s); const u8 = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); return new Type(u8.buffer); }
+const BODIES = ['ground','yaw','link1','link_opap','coupler1','coupler2','spar','carriage','instrument','wrist','jaw1','jaw2'];
+const G = {}; BODIES.forEach(k => { const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g); G[k] = g; });
+const PARTS = [], SPINNERS = [], GEO = {};
+DATA.parts.forEach(p => {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(b64(p.p, Float32Array), 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(b64(p.n, Int8Array), 3, true));
+  const mesh = new THREE.Mesh(geo, MAT[p.mat]); mesh.userData = p; G[p.body].add(mesh); PARTS.push(mesh); GEO[p.name] = geo;
+  if (p.spin){ mesh.matrixAutoUpdate = false; SPINNERS.push(mesh); }
+});
+const byName = {}; PARTS.forEach(m => byName[m.userData.name] = m);
+const REALPARTS = PARTS.filter(m => m.userData.mat !== 'mark');
+
+// target ghost: instrument + spar + carriage + wrist + jaws drawn translucent at the commanded pose
+const GG = {}; ['spar','carriage','instrument','wrist','jaw1','jaw2'].forEach(k => { const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g); GG[k] = g; });
+PARTS.forEach(m => { const u = m.userData; if (GG[u.body] && u.mat !== 'mark' && /shaft|wrist|jaw|cannula|isa_housing|spar_plate_front/.test(u.name)) GG[u.body].add(new THREE.Mesh(m.geometry, GHOSTMAT)); });
+
+// coil spring between anchor G (yaw body) and stud K (link 1)
+class Helix extends THREE.Curve { getPoint(t, o = new THREE.Vector3()){ const a = t*Math.PI*2*16; return o.set(6.5*Math.cos(a), t, 6.5*Math.sin(a)); } }
+const spring = new THREE.Mesh(new THREE.TubeGeometry(new Helix(), 480, 1.1, 6, false), new THREE.MeshStandardMaterial({color:0x9fb0bb, metalness:.75, roughness:.3}));
+scene.add(spring);
+// belts: moving tooth marks
+const BELTS = MT.belts.map(bd => {
+  const g = new THREE.Group(); const N = Math.round((2*bd.L + 2*Math.PI*bd.r)/22);
+  const tooth = new THREE.BoxGeometry(2.2, 2.4, bd.z[1]-bd.z[0]+0.6);
+  const ticks = []; for (let i=0;i<N;i++){ const m = new THREE.Mesh(tooth, MAT.mark); g.add(m); ticks.push(m); }
+  const frame = new THREE.Matrix4().makeBasis(V3(...bd.ex), V3(...bd.ey), V3(0,0,1)).setPosition(V3(...bd.o));
+  g.matrixAutoUpdate = false; G[bd.body].add(g);
+  return {...bd, g, ticks, N, frame, P:2*bd.L + 2*Math.PI*bd.r};
+});
+function loopPoint(L, r, s){
+  const P = 2*L + 2*Math.PI*r; s = ((s % P) + P) % P;
+  if (s < L) return [s, -r, 0];
+  s -= L; if (s < Math.PI*r){ const a = -Math.PI/2 + s/r; return [L + r*Math.cos(a), r*Math.sin(a), a + Math.PI/2]; }
+  s -= Math.PI*r; if (s < L) return [L - s, r, Math.PI];
+  s -= L; const a = Math.PI/2 + s/r; return [r*Math.cos(a), r*Math.sin(a), a + Math.PI/2];
+}
+// patient wall, port, RCM marker, axes, trace
+const wall = new THREE.Mesh(new THREE.SphereGeometry(320, 64, 24, 0, Math.PI*2, 0, 0.62),
+  new THREE.MeshStandardMaterial({color:0xd9a89c, transparent:true, opacity:.2, roughness:.9, side:THREE.DoubleSide, depthWrite:false}));
+wall.position.set(0, -320, ZI); scene.add(wall);
+const port = new THREE.Mesh(new THREE.TorusGeometry(10, 1.6, 10, 40), new THREE.MeshBasicMaterial({color:0xd4470f}));
+port.rotation.x = Math.PI/2; port.position.copy(R3); scene.add(port);
+const rcmDot = new THREE.Mesh(new THREE.SphereGeometry(3.2, 20, 14), new THREE.MeshBasicMaterial({color:0xd4470f, depthTest:false}));
+rcmDot.position.copy(R3); rcmDot.renderOrder = 10; scene.add(rcmDot);
+function dashed(p0, p1, color){ const g = new THREE.BufferGeometry().setFromPoints([p0,p1]); const l = new THREE.Line(g, new THREE.LineDashedMaterial({color, dashSize:14, gapSize:8})); l.computeLineDistances(); return l; }
+const axYaw = dashed(R3.clone().addScaledVector(b3, 220), R3.clone().addScaledVector(b3, -680), 0xd4470f); scene.add(axYaw);
+const axPitch = dashed(V3(0,0,ZI-160), V3(0,0,ZI+160), 0x3d7fae); axPitch.matrixAutoUpdate=false; scene.add(axPitch);
+const axShaft = dashed(V3(0,330,ZI), V3(0,-260,ZI), 0x2c7a4b); axShaft.matrixAutoUpdate=false; scene.add(axShaft);
+const TRN = 1500, trPos = new Float32Array(TRN*3); let trCount = 0;
+const trGeo = new THREE.BufferGeometry(); trGeo.setAttribute('position', new THREE.BufferAttribute(trPos, 3)); trGeo.setDrawRange(0, 0);
+const trLine = new THREE.Line(trGeo, new THREE.LineBasicMaterial({color:0xd4470f})); trLine.frustumCulled = false; scene.add(trLine);
+const grid = new THREE.GridHelper(2400, 24, 0x9aa5ad, 0x9aa5ad); grid.position.set(-300, -420, -100); grid.material.opacity=.25; grid.material.transparent=true; scene.add(grid);
+
+// ---------------- kinematics (identical to build.py)
+const M4 = () => new THREE.Matrix4();
+function rotAbout(axis, ang, p){ const t1 = M4().makeTranslation(p.x,p.y,p.z), r = M4().makeRotationAxis(axis.clone().normalize(), ang), t2 = M4().makeTranslation(-p.x,-p.y,-p.z); return t1.multiply(r).multiply(t2); }
+const Z = V3(0,0,1), X = V3(1,0,0), U0 = V3(0,-1,0);
+function rot2(v, a){ return [v[0]*Math.cos(a)-v[1]*Math.sin(a), v[0]*Math.sin(a)+v[1]*Math.cos(a)]; }
+function kin(s, sag){
+  sag = sag || {p1:0, p2:0};
+  const th = s.theta*D2R, d = [-Math.sin(th), Math.cos(th)], dd = [d[0], d[1]-1];
+  const Y = rotAbout(b3, s.yaw*D2R, R3), T = {};
+  T.ground = M4(); T.yaw = Y.clone();
+  T.link1 = Y.clone().multiply(rotAbout(Z, th, V3(O[0],O[1],0)));
+  T.link_opap = Y.clone().multiply(rotAbout(Z, th, V3(Op[0],Op[1],0)));
+  T.coupler1 = Y.clone().multiply(M4().makeTranslation(L1*dd[0], L1*dd[1], 0)).multiply(rotAbout(Z, sag.p1, V3(A0[0],A0[1],0)));
+  T.coupler2 = Y.clone().multiply(M4().makeTranslation((L1+Mlen)*dd[0], (L1+Mlen)*dd[1], 0)).multiply(rotAbout(Z, sag.p1, V3(E0[0],E0[1],0)));
+  const A = [O[0]+L1*d[0], O[1]+L1*d[1]], bb = rot2([b3.x,b3.y], sag.p1), C = [A[0]+n*bb[0], A[1]+n*bb[1]], Cn = [L1*d[0], L1*d[1]];
+  let S = M4().makeTranslation(C[0]-Cn[0], C[1]-Cn[1], 0).multiply(rotAbout(Z, th, V3(0,0,0)));
+  if (sag.p2) S = rotAbout(Z, sag.p2, V3(C[0],C[1],0)).multiply(S);
+  T.spar = Y.clone().multiply(S);
+  T.carriage = T.spar.clone().multiply(M4().makeTranslation(0, -(s.q-Q0), 0));
+  T.instrument = T.carriage.clone().multiply(rotAbout(U0, s.roll*D2R, R3));
+  T.wrist = T.instrument.clone().multiply(rotAbout(Z, s.psi*D2R, W0));
+  T.jaw1 = T.wrist.clone().multiply(rotAbout(X, (s.chi - s.grip/2)*D2R, J0));
+  T.jaw2 = T.wrist.clone().multiply(rotAbout(X, (s.chi + s.grip/2)*D2R, J0));
+  return T;
+}
+// inverse kinematics for the wrist point W (yaw, pitch, insertion about R)
+function ik(w){
+  const v = w.clone().sub(R3), q = v.length(); if (q < 1) return null;
+  const u = v.clone().divideScalar(q), sb = u.dot(b3);
+  if (Math.abs(sb) > 1) return null;
+  const th = Math.asin(sb) - beta;
+  const s0 = V3(Math.sin(th), -Math.cos(th), 0);
+  const sp = s0.clone().addScaledVector(b3, -s0.dot(b3)), up = u.clone().addScaledVector(b3, -u.dot(b3));
+  const yaw = Math.atan2(b3.dot(sp.clone().cross(up)), sp.dot(up));
+  return {yaw: yaw/D2R, theta: th/D2R, q};
+}
+const wristPoint = s => W0.clone().applyMatrix4(kin(s).wrist);
+
+// ---------------- joints: commanded target, actual state with speed/acceleration limits
+const J = [
+  {k:'yaw',   name:'Yaw φ',             sub:'axis through R', min:MT.yaw[0],   max:MT.yaw[1],   u:'°',  v:45,  a:120, jog:15},
+  {k:'theta', name:'Pitch θ',           sub:'virtual axis at R', min:MT.pitch[0], max:MT.pitch[1], u:'°',  v:45,  a:120, jog:15},
+  {k:'q',     name:'Insertion q',       sub:'wrist below R',  min:MT.q[0],     max:MT.q[1],     u:'mm', v:80,  a:300, jog:25},
+  {k:'roll',  name:'Instrument roll ρ', sub:'about shaft',    min:-260, max:260, u:'°', v:360, a:1200, jog:60},
+  {k:'psi',   name:'Wrist pitch ψ',     sub:'pin W',          min:-80,  max:80,  u:'°', v:180, a:900, jog:40, wrist:true},
+  {k:'chi',   name:'Wrist yaw χ',       sub:'pin J',          min:-80,  max:80,  u:'°', v:180, a:900, jog:40, wrist:true},
+  {k:'grip',  name:'Grip γ',            sub:'jaw opening',    min:0,    max:60,  u:'°', v:240, a:1200, jog:40, wrist:true},
+];
+const HOME = {yaw:0, theta:0, q:100, roll:0, psi:0, chi:0, grip:0};
+const START = {yaw:20, theta:12, q:120, roll:0, psi:25, chi:-15, grip:30};
+const S = {...START}, TG = {...START}, VEL = {yaw:0,theta:0,q:0,roll:0,psi:0,chi:0,grip:0};
+let sel = 1;
+const clampJ = (j, v) => Math.min(j.max, Math.max(j.min, v));
+const fmt = (j, v) => j.u === 'mm' ? v.toFixed(1)+' mm' : ((v>=0 && j.k!=='grip') ? '+' : '') + v.toFixed(1) + '°';
+const box = el('jointbox');
+J.forEach((j, i) => {
+  const row = document.createElement('div'); row.className = 'jrow'; row.dataset.i = i;
+  row.innerHTML = `<span class="nm">${i+1}. ${j.name} <i>${j.sub}</i></span><span class="val"><b id="a-${j.k}">—</b></span>
+    <div class="ctl"><button class="jog" type="button" data-j="${i}" data-d="-1" aria-label="Jog ${j.name} down">−</button>
+    <input type="range" id="s-${j.k}" min="${j.min}" max="${j.max}" step="${j.u==='mm'?0.5:0.1}" aria-label="${j.name} command">
+    <button class="jog" type="button" data-j="${i}" data-d="1" aria-label="Jog ${j.name} up">+</button>
+    <input type="number" id="n-${j.k}" min="${j.min}" max="${j.max}" step="${j.u==='mm'?1:1}" aria-label="${j.name} value"></div>`;
+  box.appendChild(row);
+  row.addEventListener('pointerdown', () => select(i));
+  el('s-'+j.k).addEventListener('input', e => { if (blocked(j)) return; TG[j.k] = clampJ(j, parseFloat(e.target.value)); stopDemo(); });
+  el('n-'+j.k).addEventListener('change', e => { const v = parseFloat(e.target.value); if (!isNaN(v) && !blocked(j)){ TG[j.k] = clampJ(j, v); stopDemo(); } });
+});
+function select(i){ sel = i; document.querySelectorAll('.jrow').forEach(r => r.classList.toggle('sel', +r.dataset.i === i)); el('hud-sel').textContent = 'Selected: ' + J[i].name; }
+select(1);
+// hold-to-jog buttons
+let jogging = null;
+document.querySelectorAll('.jog').forEach(b => {
+  const start = e => { e.preventDefault(); select(+b.dataset.j); jogging = {i:+b.dataset.j, d:+b.dataset.d, fast:e.shiftKey}; stopDemo(); };
+  b.addEventListener('pointerdown', start);
+  ['pointerup','pointerleave','pointercancel'].forEach(ev => b.addEventListener(ev, () => jogging = null));
+});
+// keyboard
+const keysDown = {};
+window.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key >= '1' && e.key <= '7'){ select(+e.key - 1); e.preventDefault(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight'){ keysDown[e.key] = true; keysDown.shift = e.shiftKey; e.preventDefault(); stopDemo(); }
+  if (e.key === ' '){ hold(); e.preventDefault(); }
+});
+window.addEventListener('keyup', e => { delete keysDown[e.key]; });
+// tip jog pad
+let tipJog = null;
+document.querySelectorAll('#pad button').forEach(b => {
+  b.addEventListener('pointerdown', e => { e.preventDefault(); tipJog = b.dataset.c; stopDemo(); });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev => b.addEventListener(ev, () => tipJog = null));
+});
+// presets
+const PRESETS = [
+  ['Home', HOME],
+  ['Left quadrant', {yaw:-45, theta:18, q:140, roll:-60, psi:30, chi:-20, grip:30}],
+  ['Right quadrant', {yaw:45, theta:-28, q:130, roll:70, psi:-25, chi:25, grip:20}],
+  ['Deep reach', {yaw:5, theta:38, q:175, roll:0, psi:45, chi:0, grip:45}],
+  ['Shallow, wide', {yaw:-70, theta:-45, q:70, roll:120, psi:-35, chi:30, grip:10}],
+  ['Retract', {q:MT.q[0], psi:0, chi:0, grip:0}],
+];
+PRESETS.forEach(([nm, p]) => { const b = document.createElement('button'); b.type='button'; b.textContent = nm; b.addEventListener('click', () => { if (braked()) return; stopDemo(); Object.assign(TG, p); }); el('presets').appendChild(b); });
+function hold(){ J.forEach(j => { TG[j.k] = S[j.k]; VEL[j.k] = 0; }); stopDemo(); }
+el('holdAll').addEventListener('click', hold);
+el('estop').addEventListener('click', () => { hold(); });
+el('fit').addEventListener('click', () => { userMoved = false; fitView(); });
+let demo = false, demoT = 0;
+el('demo').addEventListener('click', () => demo ? stopDemo() : startDemo());
+function startDemo(){ if (braked()) return; demo = true; demoT = 0; el('demo').textContent = 'Stop demo'; }
+function stopDemo(){ if (!demo) return; demo = false; el('demo').textContent = 'Run demo'; }
+document.querySelectorAll('[role=tab]').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('[role=tab]').forEach(x => x.setAttribute('aria-selected', x===t));
+  document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== t.dataset.tab);
+}));
+
+// ---------------- faults
+const F = {opap:false, belt1:false, c2:false, belt2:false, slip:false, power:false};
+let sag = {p1:0, p2:0}, slip = 0, tripped = false;
+const p1Lost = () => F.opap && F.belt1, p2Lost = () => F.c2 && F.belt2;
+const braked = () => F.power || tripped || p1Lost() || p2Lost();
+const blocked = j => braked() || (j.wrist && S.q < MT.wristQmin);
+document.querySelectorAll('[data-fault]').forEach(cb => cb.addEventListener('change', () => {
+  F[cb.dataset.fault] = cb.checked; if (!F.slip) slip = 0; if (!F.slip) tripped = false;
+  if (braked()) hold(); refreshFaults();
+}));
+function clearFaults(){ document.querySelectorAll('[data-fault]').forEach(cb => { cb.checked = false; }); Object.keys(F).forEach(k => F[k] = false); slip = 0; tripped = false; sag.p1 = 0; sag.p2 = 0; refreshFaults(); }
+el('clearFaults').addEventListener('click', clearFaults);
+function setMat(nm, failed){ const m = byName[nm]; if (m) m.material = failed ? FAILMAT : (xrayOn() && isCouplerWall(nm) ? XRAY : MAT[m.userData.mat]); }
+const xrayOn = () => el('xray').checked;
+const isCouplerWall = nm => /coupler[12]_wall_front|coupler[12]_rail/.test(nm);
+function refreshFaults(){
+  PARTS.forEach(m => { const u = m.userData; if (u.mat === 'mark') return;
+    let failed = (F.opap && u.body === 'link_opap') || (F.c2 && u.body === 'coupler2') || (F.belt1 && u.name === 'belt_1') || (F.belt2 && u.name === 'belt_2');
+    m.material = failed ? FAILMAT : (xrayOn() && isCouplerWall(u.name)) ? XRAY : MAT[u.mat]; });
+  BELTS[0].g.visible = !F.belt1; BELTS[1].g.visible = !F.belt2;
+  const brk = braked();
+  ['yaw_brake','pitch_brake','insertion_brake'].forEach(nm => byName[nm].material = brk ? BRAKEON : MAT.red);
+  const st = (bar, belt, nb, nl) => bar && belt ? ['bad','Lost',`${nb} and ${nl} both failed`] : bar ? ['warn','Backup',`${nl} is carrying it alone`] : belt ? ['warn','Backup',`${nb} is carrying it alone`] : ['ok','Dual',`${nb} + ${nl}`];
+  const rows = [
+    ['Parallelogram 1 · coupler 1 stays level', st(F.opap, F.belt1, 'Link O′A′', 'belt 1')],
+    ['Parallelogram 2 · spar parallel to link 1', st(F.c2, F.belt2, 'coupler EF', 'belt 2')],
+    ['Pitch encoders A / B', tripped ? ['bad','Tripped','Disagreement over 0.25°'] : F.slip ? ['warn','Watching','Input belt slipping'] : ['ok','Agree','Motor A vs joint B']],
+    ['Holding brakes', brk ? ['bad','Engaged','Spring-applied, power off'] : ['ok','Released','Energised to release']],
+  ];
+  el('paths').innerHTML = rows.map(([t,[c,l,sub]]) => `<div class="path"><span>${t}</span><span class="pill ${c}">${l}</span><span class="sub">${sub}</span></div>`).join('');
+  document.querySelectorAll('.jrow input, .jrow button, #pad button, #presets button, #demo').forEach(x => x.disabled = brk);
+  if (brk) stopDemo();
+}
+['xray'].forEach(id => el(id).addEventListener('change', refreshFaults));
+
+// ---------------- gravity torques
+const GVEC = V3(0,-9.81,0), Gs = V3(MT.G[0],MT.G[1],59), Ks = V3(MT.K[0],MT.K[1],59), KS = MT.KS;
+function potential(s, ws){
+  const T = kin(s); let U = 0; const p = V3(0,0,0);
+  for (const m of REALPARTS){ const u = m.userData; if (u.body==='ground') continue; p.set(u.com[0],u.com[1],u.com[2]).applyMatrix4(T[u.body]); U -= u.kg*GVEC.dot(p)*1e-3; }
+  if (ws){ const g = Gs.clone().applyMatrix4(T.yaw), k = Ks.clone().applyMatrix4(T.link1); U += 0.5*KS*g.distanceToSquared(k)*1e-3; }
+  return U;
+}
+function torque(s, k, ws){ const h = 0.05, a = {...s}, b = {...s}; a[k] -= h; b[k] += h; return -(potential(b,ws)-potential(a,ws))/(2*h*D2R); }
+
+// ---------------- telemetry table
+const TELE = [
+  ['hd','Remote center'], ['rcm','Shaft distance from R'], ['tip','Jaw tip from R (x, y, z)'],
+  ['hd','Actuators'], ['m_yaw','Yaw motor'], ['m_pitch','Pitch motor'], ['m_q','Insertion motor'], ['screw','Ball-screw turns from home'],
+  ['b1','Belt 1 travel (rel. link 1)'], ['b2','Belt 2 travel (rel. coupler 1)'], ['spr','Spring length / force'],
+  ['hd','Loads'], ['tg','Pitch torque, no spring'], ['tp','Pitch torque, counterbalanced'], ['ty','Yaw gravity torque'],
+  ['hd','Pitch encoders'], ['ea','A, motor side'], ['eb','B, joint side'], ['ed','A − B'], ['brk','Brakes'],
+];
+el('tele').innerHTML = TELE.map(([k,t]) => k==='hd' ? `<span class="hd">${t}</span>` : `<dt>${t}</dt><dd id="t-${k}">—</dd>`).join('');
+const setT = (k, v, color) => { const e = el('t-'+k); if (e){ e.textContent = v; e.style.color = color || ''; } };
+
+// ---------------- tags
+const TAGS = [['O','link1',[O[0],O[1],52]],['O′','link_opap',[Op[0],Op[1],44]],['A','link1',[A0[0],A0[1],52]],['A′','coupler1',[Ap0[0],Ap0[1],44]],
+  ['C','spar',[C0[0],C0[1],44]],['E','link1',[E0[0],E0[1],44]],['F','spar',[F0[0],F0[1],44]],['W','wrist',[W0.x,W0.y,W0.z]]];
+const tagEls = TAGS.map(([t]) => { const d = document.createElement('span'); d.className = 'tag'; d.textContent = t; el('tags').appendChild(d); return d; });
+const rTag = document.createElement('span'); rTag.className = 'tag r'; rTag.textContent = 'R'; el('tags').appendChild(rTag);
+
+// ---------------- theme
+function readBg(){ const v = getComputedStyle(document.documentElement).getPropertyValue('--scene').trim() || '#e4e9ec'; scene.background = new THREE.Color(v); }
+readBg(); matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readBg);
+new MutationObserver(readBg).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+
+// ---------------- main loop
+let last = performance.now(), frame = 0, retractMsg = '';
+function step(dt){
+  const spd = parseFloat(el('speed').value);
+  // demo trajectory
+  if (demo){
+    demoT += dt; const t = demoT;
+    Object.assign(TG, {yaw:55*Math.sin(t*0.31), theta:-3+40*Math.sin(t*0.43+0.6), q:110+62*Math.sin(t*0.23), roll:170*Math.sin(t*0.37),
+      psi:55*Math.sin(t*0.8), chi:45*Math.sin(t*0.63+1), grip:30+26*Math.sin(t*1.5)});
+  }
+  // jogging (buttons or keyboard)
+  const jj = jogging || ((keysDown.ArrowLeft || keysDown.ArrowRight) ? {i:sel, d:keysDown.ArrowRight ? 1 : -1, fast:keysDown.shift} : null);
+  if (jj && !braked()){ const j = J[jj.i]; if (!blocked(j)) TG[j.k] = clampJ(j, TG[j.k] + jj.d*j.jog*(jj.fast?3:1)*spd*dt); }
+  // tip jog via IK
+  if (tipJog && !braked()){
+    const v = parseFloat(el('tipspeed').value)*spd*dt, c = tipJog;
+    if (c === 'q+' || c === 'q-') TG.q = clampJ(J[2], TG.q + (c==='q+'?1:-1)*v);
+    else if (c === 'r+') TG.roll = clampJ(J[3], TG.roll + 90*spd*dt);
+    else {
+      const w = wristPoint(TG), ax = {x:V3(1,0,0), y:V3(0,1,0), z:V3(0,0,1)}[c[0]];
+      w.addScaledVector(ax, c[1]==='+' ? v : -v);
+      const sol = ik(w);
+      const ok = sol && sol.yaw >= J[0].min && sol.yaw <= J[0].max && sol.theta >= J[1].min && sol.theta <= J[1].max && sol.q >= J[2].min && sol.q <= J[2].max;
+      el('t-lim').textContent = ok ? 'Within workspace' : 'At a joint limit'; el('t-lim').style.color = ok ? '' : 'var(--warn)';
+      if (ok){ TG.yaw = sol.yaw; TG.theta = sol.theta; TG.q = sol.q; }
+    }
+  }
+  // interlock + retract sequencing
+  retractMsg = '';
+  const wristBent = Math.abs(S.psi) > 0.5 || Math.abs(S.chi) > 0.5 || S.grip > 0.5;
+  let qCmd = TG.q;
+  if (TG.q < MT.wristQmin && wristBent){ qCmd = Math.max(TG.q, MT.wristQmin); TG.psi = 0; TG.chi = 0; TG.grip = 0; retractMsg = 'Straightening the wrist before withdrawing into the cannula.'; }
+  if (S.q < MT.wristQmin){ TG.psi = 0; TG.chi = 0; TG.grip = 0; if (!retractMsg) retractMsg = 'Wrist locked: the jaws are inside the cannula. Insert past 55 mm to articulate.'; }
+  // actuator dynamics (trapezoidal velocity profile)
+  if (!braked()){
+    J.forEach(j => {
+      const tgt = j.k === 'q' ? qCmd : TG[j.k], err = tgt - S[j.k], vmax = j.v*spd, amax = j.a*spd;
+      const vdes = Math.sign(err)*Math.min(vmax, Math.sqrt(2*amax*Math.abs(err)));
+      VEL[j.k] += Math.max(-amax*dt, Math.min(amax*dt, vdes - VEL[j.k]));
+      const next = S[j.k] + VEL[j.k]*dt;
+      if ((tgt - next)*err <= 0 && Math.abs(VEL[j.k]) <= Math.sqrt(2*amax*Math.abs(err)) + amax*dt){ S[j.k] = tgt; VEL[j.k] = 0; }
+      else S[j.k] = next;
+      S[j.k] = clampJ(j, S[j.k]);
+    });
+  } else J.forEach(j => VEL[j.k] = 0);
+  // degraded geometry and encoder slip
+  const t1 = p1Lost() ? 6*D2R : 0, t2 = p2Lost() ? 4*D2R : 0;
+  const ease = (c, t) => Math.abs(t - c) < 1e-4 ? t : c + Math.sign(t - c)*Math.min(Math.abs(t - c), 4*D2R*dt);
+  sag.p1 = ease(sag.p1, t1); sag.p2 = ease(sag.p2, t2);
+  if (F.slip && !tripped){ slip += dt*0.5; if (slip > 0.25){ tripped = true; hold(); refreshFaults(); } }
+}
+
+function draw(){
+  const T = kin(S, sag);
+  for (const k of BODIES){ G[k].matrix.copy(T[k]); G[k].matrixWorldNeedsUpdate = true; }
+  // spinning internals: rotation in the body's own frame at the true ratio
+  for (const m of SPINNERS){ const s = m.userData.spin; m.matrix.copy(rotAbout(V3(...s.a), s.k*S[s.j]*D2R, V3(...s.p))); m.matrixWorldNeedsUpdate = true; }
+  // belts
+  BELTS.forEach(bt => { const off = bt.k*S[bt.j]; bt.g.matrix.copy(bt.frame);
+    bt.ticks.forEach((m, i) => { const [x,y,a] = loopPoint(bt.L, bt.r, i*bt.P/bt.N + off); m.position.set(x, y, (bt.z[0]+bt.z[1])/2); m.rotation.set(0,0,a); }); });
+  // spring
+  const gp = Gs.clone().applyMatrix4(T.yaw), kp = Ks.clone().applyMatrix4(T.link1), len = gp.distanceTo(kp);
+  spring.position.copy(gp); spring.scale.set(1, len, 1); spring.quaternion.setFromUnitVectors(V3(0,1,0), kp.clone().sub(gp).normalize());
+  // ghost at commanded pose
+  const showGhost = el('ghost').checked && J.some(j => Math.abs(TG[j.k] - S[j.k]) > (j.u==='mm' ? 1 : 1.5));
+  const TT = showGhost ? kin(TG) : null;
+  Object.keys(GG).forEach(k => { GG[k].visible = showGhost; if (TT){ GG[k].matrix.copy(TT[k]); GG[k].matrixWorldNeedsUpdate = true; } });
+  axPitch.matrix.copy(T.yaw); axShaft.matrix.copy(T.instrument);
+  axYaw.visible = axPitch.visible = axShaft.visible = el('showAxes').checked;
+  wall.visible = port.visible = el('showBody').checked;
+  // tip trace
+  const tip = V3(0, MT.J0[1]-13.5, ZI).applyMatrix4(T.wrist);
+  if (el('trace').checked){ if (trCount === 0 || V3(trPos[(trCount-1)*3], trPos[(trCount-1)*3+1], trPos[(trCount-1)*3+2]).distanceTo(tip) > 1.5){
+      if (trCount >= TRN){ trPos.copyWithin(0, 3); trCount = TRN-1; } trPos.set([tip.x, tip.y, tip.z], trCount*3); trCount++;
+      trGeo.attributes.position.needsUpdate = true; trGeo.setDrawRange(0, trCount); } }
+  trLine.visible = el('trace').checked;
+  // HUD + readouts
+  const a = V3(0,300,ZI).applyMatrix4(T.instrument), bpt = V3(0,-200,ZI).applyMatrix4(T.instrument);
+  const err = R3.clone().sub(a).cross(bpt.clone().sub(a).normalize()).length();
+  const errTxt = err < 1e-6 ? err.toExponential(1)+' mm' : err.toFixed(2)+' mm';
+  el('hud-rcm').textContent = 'RCM error ' + errTxt; el('hud-rcm').style.color = err > 0.5 ? 'var(--bad)' : 'var(--ok)';
+  const moving = J.some(j => Math.abs(VEL[j.k]) > 1e-3);
+  const st = p1Lost()||p2Lost() ? ['Remote center lost · brakes on','var(--bad)'] : F.power ? ['Power off · brakes holding','var(--bad)'] : tripped ? ['Encoder trip · controlled stop','var(--bad)'] :
+    (F.opap||F.belt1||F.c2||F.belt2) ? ['Degraded · backup path active','var(--warn)'] : F.slip ? ['Encoder disagreement rising','var(--warn)'] : demo ? ['Demo running','var(--muted)'] : moving ? ['Moving','var(--muted)'] : ['Holding','var(--muted)'];
+  el('hud-state').textContent = st[0]; el('hud-state').style.color = st[1];
+  el('interlock').hidden = !retractMsg; el('interlock').textContent = retractMsg;
+  J.forEach(j => {
+    const lock = blocked(j); document.querySelector(`.jrow[data-i="${J.indexOf(j)}"]`).classList.toggle('locked', lock);
+    el('a-'+j.k).textContent = fmt(j, S[j.k]);
+    const s = el('s-'+j.k), nI = el('n-'+j.k);
+    if (document.activeElement !== s) s.value = TG[j.k];
+    if (document.activeElement !== nI) nI.value = (+TG[j.k]).toFixed(j.u==='mm'?1:1);
+    if (j.wrist){ s.disabled = nI.disabled = lock; document.querySelectorAll(`.jog[data-j="${J.indexOf(j)}"]`).forEach(b => b.disabled = lock); }
+  });
+  const wr = W0.clone().applyMatrix4(T.wrist).sub(R3), tr = tip.clone().sub(R3);
+  el('t-w').textContent = `${wr.x.toFixed(0)}, ${wr.y.toFixed(0)}, ${wr.z.toFixed(0)} mm`;
+  if (frame % 4 === 0){
+    setT('rcm', errTxt, err > 0.5 ? 'var(--bad)' : 'var(--ok)'); setT('tip', `${tr.x.toFixed(0)}, ${tr.y.toFixed(0)}, ${tr.z.toFixed(0)}`);
+    const rpm = (ratio, dps) => (ratio*dps/6).toFixed(0)+' rpm';
+    setT('m_yaw', rpm(100, VEL.yaw)); setT('m_pitch', rpm(200, VEL.theta)); setT('m_q', (VEL.q/4*60).toFixed(0)+' rpm');
+    setT('screw', ((S.q-Q0)/4).toFixed(2)+' rev'); setT('b1', (BELTS[0].k*S.theta).toFixed(1)+' mm'); setT('b2', (BELTS[1].k*S.theta).toFixed(1)+' mm');
+    setT('spr', `${len.toFixed(1)} mm / ${(KS*len).toFixed(0)} N`);
+    setT('tg', torque(S,'theta',false).toFixed(2)+' N·m'); setT('tp', torque(S,'theta',true).toFixed(2)+' N·m'); setT('ty', torque(S,'yaw',true).toFixed(2)+' N·m');
+    setT('ea', (S.theta+slip).toFixed(3)+'°'); setT('eb', S.theta.toFixed(3)+'°'); setT('ed', slip.toFixed(3)+'°', slip > 0.25 ? 'var(--bad)' : '');
+    setT('brk', braked() ? 'Engaged' : 'Released', braked() ? 'var(--bad)' : '');
+  }
+  // render
+  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
+  if (canvas.width !== Math.round(w*pr) || canvas.height !== Math.round(h*pr)){ renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); if (!userMoved) fitView(); }
+  scene.updateMatrixWorld(true);
+  renderer.render(scene, camera);
+  const show = el('showTags').checked;
+  TAGS.forEach(([t, body, p], i) => { const v = V3(...p).applyMatrix4(T[body]).project(camera); const on = show && v.z < 1; tagEls[i].hidden = !on;
+    if (on){ tagEls[i].style.left = ((v.x+1)/2*w)+'px'; tagEls[i].style.top = ((1-v.y)/2*h)+'px'; } });
+  const rv = R3.clone().project(camera); rTag.hidden = !show; rTag.style.left = ((rv.x+1)/2*w)+'px'; rTag.style.top = ((1-rv.y)/2*h)+'px';
+}
+function loop(now){
+  const dt = Math.min(0.05, (now - last)/1000); last = now; frame++;
+  step(dt); controls.update(); draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------------- static sections
+const R = MT.report, L = R.loads;
+el('verify').innerHTML = [
+  [R.rcm.max_shaft_to_R_mm.toExponential(1)+' mm', `Worst shaft distance from R over ${R.rcm.poses.toLocaleString()} random 7-DOF poses`],
+  [String(Object.keys(R.interference.clashes_under_0p9mm).length), `Collisions across ${R.interference.poses} swept poses`],
+  ['0', 'Open or inverted solids'],
+  [L.pitch_gravity_no_spring_max_Nm.toFixed(1)+' → '+L.pitch_with_spring_max_Nm.toFixed(1)+' N·m', 'Worst pitch gravity torque, without and with the counterbalance'],
+  [L.yaw_gravity_max_Nm.toFixed(1)+' N·m', `Worst yaw gravity torque (CSF-17 rated ${L.yaw_CSF17_rated_Nm} N·m)`],
+  [R.bom.total_mass_kg.toFixed(1)+' kg', 'Moving mass on the yaw axis'],
+].map(([b,s]) => `<div><b>${b}</b><span>${s}</span></div>`).join('');
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+el('bom').innerHTML = MT.bom.filter(r => r.type==='catalog').map(r => `<tr><td class="k">${esc(r.part)}</td><td>${esc(r.vendor)}</td><td class="num">${r.qty}</td><td>${esc(r.description)}</td><td class="num">${r.est_mass_g >= 1000 ? (r.est_mass_g/1000).toFixed(2)+' kg' : r.est_mass_g.toFixed(0)+' g'}</td></tr>`).join('');
+
+refreshFaults();
+window.__sim = {S, TG, VEL, kin, ik, J, F, step, draw, refreshFaults, hold, wristPoint, BELTS, SPINNERS, PARTS,
+  tip: c => { tipJog = c; }, jog: (i, d) => { jogging = i == null ? null : {i, d}; }, preset: i => { Object.assign(TG, PRESETS[i][1]); },
+  startDemo, stopDemo, clearFaults, get sag(){ return sag; }, get slip(){ return slip; }, get tripped(){ return tripped; }, get msg(){ return retractMsg; }};
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>
