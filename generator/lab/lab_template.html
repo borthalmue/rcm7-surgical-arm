@@ -1,0 +1,1290 @@
+<title>RCM-7 Motion Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: same control-room system as the RCM-7 simulator. 3D work zone with a live coordinate readout on the left,
+   the task pendant (Plan / Teach / Test / I/O) on the right, then trajectory charts, the test log and the method. */
+:root{
+  --paper:#eef1f3; --panel:#f8fafb; --scene:#e4e9ec; --ink:#1c2a33; --muted:#5a6a75; --rule:#cbd4da;
+  --steel:#3d5a6a; --accent:#d4470f; --ok:#2c7a4b; --warn:#a86a00; --bad:#b42318; --chip:#e6ecef;
+  --x:#e34948; --y:#008300; --z:#2a78d6; --j-yaw:#eb6834; --j-pitch:#6250d6; --j-ins:#1baf7a;
+  --spd-lo:#86b6ef; --spd-hi:#104281; --zone:#d03b3b; --env:#7d8f9b;
+  --f-display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#10171b; --panel:#172127; --scene:#121b20; --ink:#e2e9ed; --muted:#93a3ad; --rule:#2c3a42;
+  --steel:#9ab6c6; --accent:#ff7a3d; --ok:#5cc48a; --warn:#e3a33a; --bad:#ff6b5e; --chip:#1e2b32;
+  --x:#e66767; --y:#008300; --z:#3987e5; --j-yaw:#d95926; --j-pitch:#9085e9; --j-ins:#199e70;
+  --spd-lo:#184f95; --spd-hi:#9ec5f4; --zone:#d03b3b; --env:#6f818c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#10171b; --panel:#172127; --scene:#121b20; --ink:#e2e9ed; --muted:#93a3ad; --rule:#2c3a42;
+  --steel:#9ab6c6; --accent:#ff7a3d; --ok:#5cc48a; --warn:#e3a33a; --bad:#ff6b5e; --chip:#1e2b32;
+  --x:#e66767; --y:#008300; --z:#3987e5; --j-yaw:#d95926; --j-pitch:#9085e9; --j-ins:#199e70;
+  --spd-lo:#184f95; --spd-hi:#9ec5f4; --zone:#d03b3b; --env:#6f818c; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1480px;margin:0 auto;padding-block:18px 56px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 24px;border-bottom:1.5px solid var(--ink);padding-bottom:10px}
+h1{font-family:var(--f-display);font-weight:600;font-size:2.2rem;letter-spacing:.02em;margin:0;line-height:1}
+h2{font-family:var(--f-display);font-weight:600;font-size:1.35rem;letter-spacing:.04em;text-transform:uppercase;margin:0 0 10px;text-wrap:balance}
+h3{font-family:var(--f-display);font-weight:600;font-size:1.05rem;letter-spacing:.05em;text-transform:uppercase;margin:0}
+.sheet{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.sheet a{color:inherit}
+.lede{margin:0;max-width:80ch;color:var(--muted)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:18px;align-items:start}
+@media (max-width:1060px){.main{grid-template-columns:minmax(0,1fr)}}
+.stage{position:sticky;top:max(10px,env(safe-area-inset-top,0px));background:var(--scene);border:1px solid var(--rule);min-width:0;display:flex;flex-direction:column}
+@media (max-width:1060px){.stage{position:relative;top:0}}
+.viewbox{position:relative;overflow:hidden}
+#view{display:block;width:100%;height:min(68vh,700px);min-height:340px;touch-action:none;cursor:grab}
+#view.pick{cursor:crosshair}
+.readout{position:absolute;left:10px;top:10px;background:var(--panel);border:1px solid var(--rule);padding:8px 10px;font-family:var(--f-mono);font-variant-numeric:tabular-nums;pointer-events:none;display:flex;flex-direction:column;gap:3px;max-width:calc(100% - 20px)}
+.readout .lbl{font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.readout .xyz{display:flex;gap:14px;font-size:1.02rem;font-weight:500;flex-wrap:wrap}
+.readout .xyz b{font-weight:600;margin-right:4px}
+.cx{color:var(--x)} .cy{color:var(--y)} .cz{color:var(--z)}
+.readout .jn{font-size:.74rem;color:var(--muted)}
+.state{position:absolute;right:10px;top:10px;font-family:var(--f-mono);font-size:.76rem;background:var(--panel);border:1px solid var(--rule);padding:3px 8px;pointer-events:none;font-variant-numeric:tabular-nums}
+.legend3d{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none}
+.legend3d span{font-family:var(--f-mono);font-size:.66rem;color:var(--muted);background:var(--panel);border:1px solid var(--rule);padding:2px 6px;display:flex;align-items:center;gap:6px}
+.ramp{display:inline-block;width:54px;height:6px;background:linear-gradient(90deg,var(--spd-lo),var(--spd-hi))}
+.layers{display:flex;flex-wrap:wrap;gap:4px 14px;padding:6px 10px;border-top:1px solid var(--rule);background:var(--panel);font-size:.76rem}
+.layers label{display:flex;gap:5px;align-items:center;cursor:pointer;color:var(--muted)}
+@media (max-width:640px){.readout{padding:6px 8px}.readout .xyz{font-size:.9rem;gap:10px}.readout .jn{font-size:.66rem}.state{top:auto;bottom:10px;left:10px;right:auto}.lgtxt,.hint{display:none!important}}
+.tag{position:absolute;transform:translate(-50%,-150%);font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--ink);background:var(--panel);border:1px solid var(--rule);padding:0 4px;pointer-events:none;white-space:nowrap;font-variant-numeric:tabular-nums}
+.tag.tick{background:transparent;border:0;color:var(--muted);font-size:10px;transform:translate(-50%,-50%)}
+.tag.ax{font-weight:600;background:transparent;border:0;transform:translate(-50%,-50%);font-size:12px}
+.tag.a{border-color:var(--steel)} .tag.b{border-color:var(--accent);color:var(--accent)} .tag.k{border-color:var(--zone);color:var(--zone);transform:translate(-50%,40%)} .tag.r{color:var(--accent);border-color:var(--accent)}
+.stagebar{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;padding:8px 10px;border-top:1px solid var(--rule);background:var(--panel)}
+.stagebar .sp{flex:1}
+.scrub{display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:0;font-family:var(--f-mono);font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.scrub input{flex:1;min-width:0;accent-color:var(--accent)}
+.side{display:flex;flex-direction:column;gap:12px;min-width:0}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--ink)}
+.tabs button{border:0;border-right:1px solid var(--ink);background:transparent;padding:7px 0;font-weight:600}
+.tabs button:last-child{border-right:0}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.pane{display:flex;flex-direction:column;gap:12px}
+fieldset{border:1px solid var(--rule);background:var(--panel);margin:0;padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+legend{font-family:var(--f-display);font-weight:600;font-size:1rem;letter-spacing:.06em;text-transform:uppercase;padding:0 6px}
+legend .pill{margin-left:6px;vertical-align:2px}
+button{font:inherit;font-size:.82rem;font-weight:500;padding:5px 11px;border:1px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+button.primary{background:var(--ink);color:var(--paper)}
+button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{border-color:var(--bad);color:var(--bad)}
+button.small{font-size:.74rem;padding:3px 8px}
+button:disabled,input:disabled,select:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=number],input[type=text],select,textarea{font:inherit;font-size:.8rem;padding:4px 6px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);min-width:0}
+input[type=number],input[type=text]{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--ink)}
+.seg button{border:0;padding:5px 0}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.trip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.trip label{display:flex;flex-direction:column;gap:2px;font-size:.7rem;font-family:var(--f-mono);color:var(--muted);letter-spacing:.03em}
+.trip label b{font-weight:600}
+.trip input{width:100%}
+.quad{grid-template-columns:repeat(4,minmax(0,1fr))}
+.conv{font-family:var(--f-mono);font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums;margin:0}
+.row{display:flex;gap:8px;align-items:center;font-size:.8rem;flex-wrap:wrap}
+.row label{display:flex;gap:6px;align-items:center}
+.row select{flex:1;min-width:0}
+.check{display:flex;gap:6px;align-items:center;font-size:.8rem;cursor:pointer}
+.ptitle{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pill{display:inline-block;font-family:var(--f-mono);font-size:.68rem;padding:1px 7px;border:1px solid currentColor;letter-spacing:.04em;white-space:nowrap}
+.pill.ok{color:var(--ok)} .pill.warn{color:var(--warn)} .pill.bad{color:var(--bad)} .pill.mut{color:var(--muted)}
+.zones{display:flex;flex-direction:column;gap:6px}
+.zrow{display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr)) auto;gap:5px;align-items:center;font-family:var(--f-mono);font-size:.72rem}
+.zrow b{color:var(--zone);font-weight:600}
+.zrow input{width:100%;padding:3px 4px}
+.zhead{font-size:.64rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+details summary{cursor:pointer;font-size:.8rem;font-weight:500}
+details[open] summary{margin-bottom:8px}
+.result{display:flex;flex-direction:column;gap:8px}
+.headline{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.headline b{font-family:var(--f-mono);font-size:1.1rem;font-weight:500;font-variant-numeric:tabular-nums}
+dl.ro{display:grid;grid-template-columns:1fr auto;gap:3px 10px;margin:0;font-size:.8rem}
+dl.ro dt{color:var(--muted)} dl.ro dd{margin:0;font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.msgs{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none;font-size:.78rem}
+.msgs li{padding:5px 8px;border-left:3px solid var(--rule);background:var(--paper)}
+.msgs li.bad{border-color:var(--bad)} .msgs li.warn{border-color:var(--warn)} .msgs li.note{border-color:var(--steel)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pad button{padding:9px 0;font-family:var(--f-mono);font-size:.76rem;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1.2}
+.pad button i{font-style:normal;font-size:.64rem;color:var(--muted)}
+.pad button.on i{color:#fff}
+.demos{display:flex;flex-direction:column;gap:0}
+.demo{display:grid;grid-template-columns:1fr auto;gap:2px 8px;padding:7px 0;border-top:1px solid var(--rule);font-size:.8rem;align-items:center}
+.demo:first-child{border-top:0}
+.demo .sub{grid-column:1/2;font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+.demo .btns{grid-row:1/3;grid-column:2}
+.demo.sel span:first-child{color:var(--accent);font-weight:600}
+.note{font-size:.76rem;color:var(--muted);margin:0}
+.kbd{font-family:var(--f-mono);font-size:.68rem;color:var(--muted);border:1px solid var(--rule);padding:0 4px;background:var(--paper)}
+.progress{height:4px;background:var(--rule);position:relative}
+.progress i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);width:0}
+pre.log{margin:0;font-family:var(--f-mono);font-size:.72rem;line-height:1.45;background:var(--paper);border:1px solid var(--rule);padding:8px;height:190px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+pre.log .in{color:var(--accent)} pre.log .err{color:var(--bad)}
+textarea{font-family:var(--f-mono);font-size:.72rem;width:100%;min-height:180px;resize:vertical;line-height:1.4}
+pre.csv{margin:0;font-family:var(--f-mono);font-size:.66rem;background:var(--paper);border:1px solid var(--rule);padding:6px;overflow-x:auto;white-space:pre;max-height:110px}
+.cmdrow{display:grid;grid-template-columns:1fr auto;gap:6px}
+.charts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:1100px){.charts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.charts{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--rule);padding:10px 12px 8px;min-width:0;position:relative;display:flex;flex-direction:column;gap:4px}
+.card .ct{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.card .ct span{font-family:var(--f-mono);font-size:.68rem;color:var(--muted)}
+.lg{display:flex;gap:10px;flex-wrap:wrap;font-size:.72rem;color:var(--muted)}
+.lg span{display:flex;align-items:center;gap:5px}
+.lg i{display:inline-block;width:14px;height:2px}
+.chartbox{position:relative;height:160px}
+.chartbox svg{display:block;width:100%;height:160px;overflow:visible}
+.chartbox .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.78rem;color:var(--muted);text-align:center;padding:0 12px}
+svg text{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
+svg .grid line{stroke:var(--rule);stroke-width:1}
+svg .axis{stroke:var(--muted);stroke-width:1}
+svg .ref{stroke:var(--muted);stroke-dasharray:4 3;stroke-width:1}
+svg .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+svg .lbl{font-size:10.5px;font-weight:500;fill:var(--ink)}
+svg .cross{stroke:var(--ink);stroke-width:1;opacity:.55}
+svg .play{stroke:var(--accent);stroke-width:1.5}
+svg .dot{stroke:var(--panel);stroke-width:2}
+.s-x{stroke:var(--x)} .s-y{stroke:var(--y)} .s-z{stroke:var(--z)} .s-yaw{stroke:var(--j-yaw)} .s-pitch{stroke:var(--j-pitch)} .s-ins{stroke:var(--j-ins)} .s-err{stroke:var(--steel)}
+.f-x{fill:var(--x)} .f-y{fill:var(--y)} .f-z{fill:var(--z)} .f-yaw{fill:var(--j-yaw)} .f-pitch{fill:var(--j-pitch)} .f-ins{fill:var(--j-ins)} .f-err{fill:var(--steel)}
+.b-x{background:var(--x)} .b-y{background:var(--y)} .b-z{background:var(--z)} .b-yaw{background:var(--j-yaw)} .b-pitch{background:var(--j-pitch)} .b-ins{background:var(--j-ins)} .b-err{background:var(--steel)}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--ink);padding:5px 8px;font-family:var(--f-mono);font-size:.7rem;font-variant-numeric:tabular-nums;z-index:3;white-space:nowrap;display:flex;flex-direction:column;gap:1px}
+.tip i{display:inline-block;width:8px;height:8px;margin-right:6px;vertical-align:0}
+.tblwrap{overflow-x:auto;background:var(--panel);border:1px solid var(--rule)}
+table{border-collapse:collapse;width:100%;font-size:.8rem}
+th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-family:var(--f-mono);font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;white-space:nowrap}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+td.k{font-family:var(--f-mono);white-space:nowrap}
+tbody tr.click{cursor:pointer} tbody tr.click:hover{background:var(--chip)}
+.testlog{min-width:900px} .dm{min-width:640px} .lim{min-width:720px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule)}
+.tiles div{background:var(--panel);padding:9px 12px;display:flex;flex-direction:column;gap:1px}
+.tiles b{font-family:var(--f-mono);font-size:1rem;font-weight:500;font-variant-numeric:tabular-nums}
+.tiles span{font-size:.74rem;color:var(--muted)}
+.steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;counter-reset:st}
+.steps li{background:var(--panel);border:1px solid var(--rule);padding:10px 12px;display:flex;flex-direction:column;gap:4px;counter-increment:st}
+.steps li h3::before{content:counter(st) "  ";color:var(--accent);font-family:var(--f-mono);font-weight:500}
+.steps p{margin:0;font-size:.82rem;color:var(--muted);max-width:68ch}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.two{grid-template-columns:minmax(0,1fr)}}
+.frame{display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:.82rem;color:var(--muted)}
+.frame b{font-family:var(--f-mono)}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>RCM-7 Motion Lab</h1>
+    <span class="sheet">Planner · servo · test bench · mm and rad · <a href="https://borthalmue.github.io/rcm7-surgical-arm/" target="_blank" rel="noopener">joint simulator ↗</a></span>
+  </header>
+  <p class="lede">Give the arm a start A and a goal B for the tool tip, either as X, Y, Z in millimetres or as joint values in radians. The planner shapes a path, times it against every joint's speed and acceleration limit, runs it through a simulated 1 kHz servo loop on the CAD model's real masses, and grades the result. Teach it a move by jogging the tip and it will reuse that move's shape between any two points.</p>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <div class="viewbox">
+        <canvas id="view" aria-label="3D view of the RCM-7 arm with the planned path"></canvas>
+        <div class="readout" aria-live="off">
+          <span class="lbl">Tool tip from R · mm</span>
+          <div class="xyz"><span class="cx"><b>X</b><span id="r-x">—</span></span><span class="cy"><b>Y</b><span id="r-y">—</span></span><span class="cz"><b>Z</b><span id="r-z">—</span></span></div>
+          <span class="jn" id="r-j">—</span>
+          <span class="jn" id="r-w">—</span>
+        </div>
+        <span class="state" id="state">Ready</span>
+        <div class="legend3d"><span><span class="lgtxt">Path colour = tool speed</span> <i class="ramp"></i> <b id="spdmax">—</b></span><span class="hint">Drag to orbit · scroll to zoom · right-drag to pan</span></div>
+        <div id="tags"></div>
+      </div>
+      <div class="stagebar">
+        <button id="run" class="primary" type="button">Run move</button>
+        <button id="stop" class="danger" type="button">Stop</button>
+        <label class="row" for="viewsel"><select id="viewsel" aria-label="Camera view">
+          <option value="work" selected>View: work zone</option><option value="front">View: front (X–Y)</option><option value="top">View: top (X–Z)</option><option value="side">View: side (Z–Y)</option><option value="arm">View: whole arm</option></select></label>
+        <button id="fit" type="button" class="small" title="Re-centre the camera on R, A, B and the zones">Fit</button>
+        <div class="scrub"><span>Preview</span><input id="scrub" type="range" min="0" max="1000" value="1000" aria-label="Preview the planned move at a time"><span id="scrubt">— s</span></div>
+      </div>
+      <div class="layers" role="group" aria-label="Scene layers">
+        <label><input type="checkbox" id="ly-axes" checked> Axes and scale</label>
+        <label><input type="checkbox" id="ly-guides" checked> Coordinate guides</label>
+        <label><input type="checkbox" id="ly-tags" checked> Labels</label>
+        <label><input type="checkbox" id="ly-env" checked> Reach envelope</label>
+        <label><input type="checkbox" id="ly-wall"> Body wall</label>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="plan" type="button">Plan</button>
+        <button role="tab" aria-selected="false" data-tab="teach" type="button">Teach</button>
+        <button role="tab" aria-selected="false" data-tab="test" type="button">Test</button>
+        <button role="tab" aria-selected="false" data-tab="io" type="button">I/O</button>
+      </div>
+
+      <div class="pane" data-pane="plan">
+        <fieldset>
+          <legend>Coordinates</legend>
+          <div class="seg" role="group" aria-label="Coordinate input mode"><button type="button" id="m-xyz" aria-pressed="true">X Y Z · mm</button><button type="button" id="m-jnt" aria-pressed="false">Joints · rad</button></div>
+          <p class="note">Origin is R, the incision. <b class="cx">+X</b> right, <b class="cy">+Y</b> up out of the body, <b class="cz">+Z</b> toward you. Points below the skin have negative Y.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Start A <span class="pill ok" id="a-pill">Reachable</span></legend>
+          <label class="check"><input type="checkbox" id="a-arm" checked> Start where the arm is now</label>
+          <div class="trip" id="a-in"></div>
+          <p class="conv" id="a-conv">—</p>
+        </fieldset>
+        <fieldset>
+          <legend>Goal B <span class="pill ok" id="b-pill">Reachable</span></legend>
+          <div class="trip" id="b-in"></div>
+          <p class="conv" id="b-conv">—</p>
+          <div class="btns"><button type="button" class="small" id="b-pick">Pick in view</button><button type="button" class="small" id="b-snap">Snap into reach</button><button type="button" class="small" id="b-swap">Swap A and B</button></div>
+          <details id="wristbox"><summary>Wrist at B (roll, wrist pitch, wrist yaw, grip)</summary>
+            <div class="trip quad" id="w-in"></div>
+            <p class="note">Radians. The tip still lands exactly on B; the arm compensates for the wrist. Below 55 mm insertion the wrist is held straight.</p>
+          </details>
+        </fieldset>
+        <fieldset>
+          <legend>Path and timing</legend>
+          <div class="row"><label for="path">Path</label><select id="path">
+            <option value="straight">Straight line (tip moves in a line)</option>
+            <option value="arc">Joint arc (shortest for the motors)</option>
+            <option value="avoid" selected>Avoid keep-out zones (optimised)</option>
+            <option value="learned">Learned from a demonstration</option></select></div>
+          <div class="row" id="demo-row" hidden><label for="demosel">Demo</label><select id="demosel"></select></div>
+          <div class="row"><label for="timing">Timing</label><select id="timing">
+            <option value="smooth" selected>Smooth (minimum jerk)</option>
+            <option value="fastest">Fastest (time-optimal)</option>
+            <option value="fixed">Fixed duration</option>
+            <option value="demo">Demonstration pace</option></select></div>
+          <div class="row" id="dur-row" hidden><label for="dur">Duration</label><input type="number" id="dur" value="2" min="0.1" max="30" step="0.1" style="width:80px"><span class="note">s (stretched if too fast)</span></div>
+          <div class="row"><label for="speed">Speed cap</label><select id="speed"><option value="0.25">25 % of joint limits</option><option value="0.5">50 % of joint limits</option><option value="0.75">75 % of joint limits</option><option value="1" selected>100 % of joint limits</option></select></div>
+          <div class="row"><label for="servo">Servo</label><select id="servo"><option value="real" selected>Realistic (friction, model error, encoders)</option><option value="ideal">Ideal</option></select></div>
+        </fieldset>
+        <fieldset>
+          <legend>Keep-out zones</legend>
+          <div class="zones" id="zones"></div>
+          <div class="btns"><button type="button" class="small" id="z-add">Add zone on the path</button><button type="button" class="small" id="z-clear">Remove all</button></div>
+          <p class="note">Spheres the whole shaft must stay out of, from R to the tip, with a 3 mm margin. Units mm.</p>
+        </fieldset>
+        <fieldset class="result" id="result">
+          <legend>Result <span class="pill mut" id="res-pill">—</span></legend>
+          <div class="headline"><b id="res-head">—</b><span class="note" id="res-sub"></span></div>
+          <dl class="ro" id="res-dl"></dl>
+          <ul class="msgs" id="res-msgs"></ul>
+        </fieldset>
+      </div>
+
+      <div class="pane" data-pane="teach" hidden>
+        <fieldset>
+          <legend>Jog the tool tip</legend>
+          <div class="pad" id="pad">
+            <button type="button" data-v="z-">Z−<i>away · Q</i></button><button type="button" data-v="y+">Y+<i>up · W</i></button><button type="button" data-v="z+">Z+<i>toward · E</i></button>
+            <button type="button" data-v="x-">X−<i>left · A</i></button><button type="button" data-v="y-">Y−<i>down · S</i></button><button type="button" data-v="x+">X+<i>right · D</i></button>
+          </div>
+          <div class="row"><label for="jogspd">Jog speed</label><select id="jogspd"><option value="5">5 mm/s</option><option value="15" selected>15 mm/s</option><option value="30">30 mm/s</option><option value="50">50 mm/s</option></select></div>
+          <div class="btns"><button type="button" class="small" id="set-a">Use tip as A</button><button type="button" class="small" id="set-b">Use tip as B</button><button type="button" class="small" id="home">Go home</button></div>
+          <p class="note" id="jog-msg">Hold a button or key. Several keys at once move diagonally.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Record a demonstration</legend>
+          <div class="btns"><button type="button" id="rec">● Record</button><span class="note" id="rec-msg">Not recording</span></div>
+          <p class="note">Jog from a start point to an end point while recording. The planner learns the shape and pace of your move (a dynamic movement primitive) and stretches it to fit any A and B.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Demonstrations</legend>
+          <div class="demos" id="demos"></div>
+        </fieldset>
+      </div>
+
+      <div class="pane" data-pane="test" hidden>
+        <fieldset>
+          <legend>Test the mechanism</legend>
+          <div class="row"><label for="suite">Suite</label><select id="suite">
+            <option value="random" selected>Random A→B pairs</option>
+            <option value="sweep">Workspace sweep from A (126 goals)</option>
+            <option value="repeat">Repeatability (same move, new servo errors)</option>
+            <option value="stress">Stress: fastest timing, full speed</option></select></div>
+          <div class="row" id="count-row"><label for="count">Moves</label><input type="number" id="count" value="25" min="1" max="500" step="1" style="width:80px"></div>
+          <p class="note">Path type, timing, speed cap, servo model and keep-out zones come from the Plan tab.</p>
+          <div class="btns"><button type="button" class="primary" id="t-run">Run suite</button><button type="button" id="t-stop">Abort</button></div>
+          <div class="progress"><i id="t-bar"></i></div>
+          <span class="note" id="t-msg">—</span>
+        </fieldset>
+        <fieldset>
+          <legend>Summary <span class="pill mut" id="t-pill">—</span></legend>
+          <dl class="ro" id="t-dl"></dl>
+          <p class="note">Every move is listed in the test log under the charts. Click a row to load it.</p>
+        </fieldset>
+      </div>
+
+      <div class="pane" data-pane="io" hidden>
+        <fieldset>
+          <legend>Command line</legend>
+          <div class="cmdrow"><input type="text" id="cmd" placeholder="go 30 -110 20" aria-label="Command" autocomplete="off" spellcheck="false"><button type="button" class="primary" id="cmd-send">Send</button></div>
+          <pre class="log" id="log" aria-live="polite"></pre>
+          <details><summary>Commands</summary><pre class="csv" id="cmdhelp"></pre></details>
+        </fieldset>
+        <fieldset>
+          <legend>Task (input)</legend>
+          <textarea id="taskjson" spellcheck="false" aria-label="Task JSON"></textarea>
+          <div class="btns"><button type="button" class="primary small" id="json-apply">Apply JSON</button><button type="button" class="small" id="json-copy">Copy</button><span class="note" id="json-msg"></span></div>
+        </fieldset>
+        <fieldset>
+          <legend>Output</legend>
+          <div class="btns"><button type="button" class="small" id="csv-copy">Copy trajectory CSV</button><button type="button" class="small" id="res-copy">Copy result JSON</button><span class="note" id="out-msg"></span></div>
+          <pre class="csv" id="csvprev"></pre>
+          <p class="note">200 samples per second: time, tip X Y Z, all seven joints, drive loads and servo tracking error.</p>
+        </fieldset>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Trajectory</h2>
+    <div class="charts" id="charts"></div>
+    <p class="note" style="margin-top:8px">Hover a chart to read values and to mark that instant on the path in the 3D view. The orange line follows the arm while a move runs.</p>
+  </section>
+
+  <section id="testlog-sec">
+    <h2>Test log</h2>
+    <p class="note" id="t-cap" style="margin:0 0 8px">—</p>
+    <div class="tiles" id="t-tiles"></div>
+    <div class="tblwrap" style="margin-top:10px"><table class="testlog">
+      <thead><tr><th>#</th><th>Start A (x, y, z)</th><th>Goal B (x, y, z)</th><th style="text-align:right">Time</th><th style="text-align:right">Peak speed</th><th style="text-align:right">Peak load</th><th style="text-align:right">Final error</th><th style="text-align:right">Max tracking</th><th style="text-align:right">Clearance</th><th>Result</th></tr></thead>
+      <tbody id="t-body"></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>How the planner works</h2>
+    <ol class="steps">
+      <li><h3>Read the task</h3><p>A and B are tool-tip positions in mm from R. Joint entries (yaw and pitch in rad, insertion in mm) go through forward kinematics first, so both modes mean the same thing.</p></li>
+      <li><h3>Check reach</h3><p>Closed-form inverse kinematics about R, refined by Newton steps when the wrist is bent, then checked against every joint range and the cannula interlock (wrist straight below 55 mm insertion).</p></li>
+      <li><h3>Shape the path</h3><p>Straight line in space, or a straight line in joint space. Avoidance optimises a cubic Bézier with Nelder–Mead, penalising path length, any part of the shaft entering a keep-out sphere, and leaving a joint range. Learned paths replay a movement primitive fitted to your demonstration.</p></li>
+      <li><h3>Time it</h3><p>Fastest uses time-optimal path parameterisation: a backward pass finds the highest speed that can still stop in time, a forward pass rides that limit. Smooth uses a minimum-jerk profile with the shortest duration that stays inside every limit.</p></li>
+      <li><h3>Compute loads</h3><p>A mass matrix and gravity vector built from the mass, centre of mass and inertia tensor of each of the 129 CAD parts, plus the reflected motor rotor inertia through each gear ratio and the counterbalance spring.</p></li>
+      <li><h3>Run the servo</h3><p>A 1 kHz computed-torque PID with feedforward drives a plant that is 8–12 % heavier than the controller assumes, with friction and 20-bit encoder steps. Ideal mode removes all three.</p></li>
+      <li><h3>Grade</h3><p>Pass needs a final error under 50 µm, every joint within its speed and acceleration limit, drive torque under the gearbox peak, the shaft clear of every zone and the remote center unmoved. RMS load above a motor's continuous rating is a warning.</p></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Data model</h2>
+    <div class="two">
+      <div class="tblwrap"><table class="dm">
+        <thead><tr><th>Task field</th><th>Type · unit</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="k">A, B</td><td>[x, y, z] · mm</td><td>Tool-tip start and goal, from R</td></tr>
+          <tr><td class="k">startFromArm</td><td>bool</td><td>Use the arm's current tip as A</td></tr>
+          <tr><td class="k">path</td><td>straight · arc · avoid · learned</td><td>How the path is shaped</td></tr>
+          <tr><td class="k">timing</td><td>smooth · fastest · fixed · demo</td><td>How it is timed</td></tr>
+          <tr><td class="k">duration</td><td>number · s</td><td>Used by fixed timing</td></tr>
+          <tr><td class="k">speed</td><td>0.25 – 1</td><td>Fraction of every joint's speed limit (acceleration scales with its square)</td></tr>
+          <tr><td class="k">wristB</td><td>{roll, wristPitch, wristYaw, grip} · rad</td><td>Instrument pose at B</td></tr>
+          <tr><td class="k">obstacles</td><td>[{c: [x, y, z], r}] · mm</td><td>Keep-out spheres</td></tr>
+          <tr><td class="k">demo</td><td>string</td><td>Name of the demonstration for learned paths</td></tr>
+          <tr><td class="k">servo</td><td>realistic · ideal</td><td>Plant model used to execute the move</td></tr>
+        </tbody></table></div>
+      <div class="tblwrap"><table class="dm">
+        <thead><tr><th>Result field</th><th>Type · unit</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="k">pass, reasons, warnings</td><td>bool, [string]</td><td>Verdict and why</td></tr>
+          <tr><td class="k">duration, length</td><td>s, mm</td><td>Move time and tip path length</td></tr>
+          <tr><td class="k">peakSpeed, peakAcc</td><td>fraction of limit</td><td>Worst joint, named in peakSpeedJoint</td></tr>
+          <tr><td class="k">torque</td><td>[N·m, N·m, N]</td><td>Peak yaw, pitch and insertion drive load</td></tr>
+          <tr><td class="k">endErr, track</td><td>mm</td><td>Final tip error, worst tracking error</td></tr>
+          <tr><td class="k">clearance</td><td>mm</td><td>Closest the shaft came to a zone</td></tr>
+          <tr><td class="k">t, X, XD, XDD</td><td>200 Hz arrays · rad, mm</td><td>Reference joint trajectory and derivatives</td></tr>
+          <tr><td class="k">P, Xa, ERR, TAU</td><td>200 Hz arrays</td><td>Planned tip, servo-executed joints, tracking error, drive loads</td></tr>
+        </tbody></table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Joint limits and drive data used</h2>
+    <div class="tblwrap"><table class="lim">
+      <thead><tr><th>Joint</th><th>Range</th><th style="text-align:right">Speed limit</th><th style="text-align:right">Acceleration limit</th><th>Drive</th></tr></thead>
+      <tbody id="limits"></tbody>
+    </table></div>
+    <p class="note" style="margin-top:8px">Gear ratings are catalog values (CSF-17 and SHG-17 strain-wave gears). The insertion peak (3× continuous), the motor rotor inertia (1.35 × 10⁻⁵ kg·m²), friction and the 75 % drive efficiency are assumptions, labelled as such.</p>
+  </section>
+</div>
+
+<script type="application/json" id="payload">__PAYLOAD__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/*__CORE__*/
+</script>
+<script>
+(()=>{
+const DATA = JSON.parse(document.getElementById('payload').textContent);
+const MT = DATA.meta, D2R = Math.PI/180;
+const C = RCM7Core.createCore(MT, DATA.parts);
+const el = id => document.getElementById(id);
+const V3 = (x,y,z) => new THREE.Vector3(x,y,z);
+const R3 = V3(0,0,MT.ZI);
+const W = p => V3(p[0], p[1] + 0, p[2] + MT.ZI);           // task frame (from R) -> world
+const MINUS = '−';
+const sg = (v, d=1) => (v < 0 ? MINUS : v > 0 ? '+' : '') + Math.abs(v).toFixed(d);
+const fx = (v, d=1) => (v < 0 ? MINUS : '') + Math.abs(v).toFixed(d);
+const fp = (p, d=1) => p.map(v => fx(v, d)).join(', ');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// ================================================================ scene
+const canvas = el('view');
+let renderer;
+try { renderer = new THREE.WebGLRenderer({canvas, antialias:true}); }
+catch(e){ el('state').textContent = 'WebGL is not available in this browser'; }
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, 1.6, 2, 20000);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+if (renderer){ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2)); renderer.outputEncoding = THREE.sRGBEncoding; }
+const VIEWS = {
+  work: {t:[18,-95,0], d:[-0.62,0.42,1], r:520},
+  front:{t:[10,-95,0], d:[0,0.02,1], r:560},
+  top:  {t:[10,-100,0], d:[0,1,0.03], r:600},
+  side: {t:[0,-95,0], d:[1,0.02,0], r:560},
+  arm:  {t:[-230,180,0], d:[-0.55,0.29,0.84], r:1690},
+};
+let userMoved = false, curView = 'work';
+function taskFrame(){      // bounding sphere of R, A, B and the zones, in task coordinates
+  const pts = [[0,0,0], taskA(), ST.B]; ST.obstacles.forEach(o => { pts.push(o.c.map(v => v - o.r), o.c.map(v => v + o.r)); });
+  if (PLAN && PLAN.path) PLAN.path.P.forEach((p, i) => { if (i % 40 === 0) pts.push(p); });
+  const lo = [0,1,2].map(j => Math.min(...pts.map(p => p[j]))), hi = [0,1,2].map(j => Math.max(...pts.map(p => p[j])));
+  return {t: lo.map((v, j) => (v + hi[j])/2), r: Math.max(45, Math.hypot(hi[0]-lo[0], hi[1]-lo[1], hi[2]-lo[2])/2)};
+}
+function fitView(){
+  const v = VIEWS[curView], asp = Math.max(0.3, canvas.clientWidth/Math.max(1, canvas.clientHeight)), half = 16*D2R;
+  const f = curView === 'arm' ? {t:v.t, r:v.r} : taskFrame();
+  const fitHalf = Math.min(half, Math.atan(Math.tan(half)*asp));
+  const dist = curView === 'arm' ? v.r*Math.max(1, 1.25/asp) : f.r*1.42/Math.sin(fitHalf);
+  const t = W(curView === 'arm' ? f.t : [f.t[0], f.t[1] - 0.14*f.r, f.t[2]]), d = V3(...v.d).normalize();
+  camera.position.copy(t).addScaledVector(d, dist); controls.target.copy(t);
+  camera.lookAt(t); controls.update();
+  grid.visible = curView === 'arm';
+}
+controls.addEventListener('start', () => { userMoved = true; });
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9096, 0.75));
+const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(-600, 1200, 900); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff, 0.35); fill.position.set(900, 300, -900); scene.add(fill);
+const MATDEF = {alu:[0xc9ced3,.55,.38], alu2:[0x8a929b,.5,.42], steel:[0xbcc1c7,.85,.24], black:[0x2b2e33,.25,.6],
+  red:[0xb33a2c,.3,.5], pcb:[0x2f7a52,.1,.6], belt:[0x1d1e20,0,.9], stop:[0xe48a1a,.1,.55], white:[0xe9e7e1,0,.7], mark:[0xffb21f,.1,.4]};
+const MAT = {}; for (const k in MATDEF){ const [c,me,ro]=MATDEF[k]; MAT[k]=new THREE.MeshStandardMaterial({color:c, metalness:me, roughness:ro}); }
+MAT.mark.emissive = new THREE.Color(0x553300);
+const GHOSTMAT = new THREE.MeshBasicMaterial({color:0x3d7fae, transparent:true, opacity:.3, depthWrite:false});
+function b64(s, Type){ const bin = atob(s); const u8 = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i); return new Type(u8.buffer); }
+const BODIES = ['ground','yaw','link1','link_opap','coupler1','coupler2','spar','carriage','instrument','wrist','jaw1','jaw2'];
+const G = {}; BODIES.forEach(k => { const g = new THREE.Group(); g.matrixAutoUpdate = false; scene.add(g); G[k] = g; });
+const PARTS = [], SPINNERS = [];
+DATA.parts.forEach(p => {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(b64(p.p, Float32Array), 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(b64(p.n, Int8Array), 3, true));
+  const mesh = new THREE.Mesh(geo, MAT[p.mat]); mesh.userData = p; G[p.body].add(mesh); PARTS.push(mesh);
+  if (p.spin){ mesh.matrixAutoUpdate = false; SPINNERS.push(mesh); }
+});
+const GG = {}; ['spar','carriage','instrument','wrist','jaw1','jaw2'].forEach(k => { const g = new THREE.Group(); g.matrixAutoUpdate = false; g.visible = false; scene.add(g); GG[k] = g; });
+PARTS.forEach(m => { const u = m.userData; if (GG[u.body] && u.mat !== 'mark' && /shaft|wrist|jaw|isa_housing/.test(u.name)) GG[u.body].add(new THREE.Mesh(m.geometry, GHOSTMAT)); });
+class Helix extends THREE.Curve { getPoint(t, o = new THREE.Vector3()){ const a = t*Math.PI*2*16; return o.set(6.5*Math.cos(a), t, 6.5*Math.sin(a)); } }
+const spring = new THREE.Mesh(new THREE.TubeGeometry(new Helix(), 480, 1.1, 6, false), new THREE.MeshStandardMaterial({color:0x9fb0bb, metalness:.75, roughness:.3}));
+scene.add(spring);
+const Gs = V3(MT.G[0],MT.G[1],59), Ks = V3(MT.K[0],MT.K[1],59);
+const BELTS = MT.belts.map(bd => {
+  const g = new THREE.Group(); const N = Math.round((2*bd.L + 2*Math.PI*bd.r)/22);
+  const tooth = new THREE.BoxGeometry(2.2, 2.4, bd.z[1]-bd.z[0]+0.6);
+  const ticks = []; for (let i=0;i<N;i++){ const m = new THREE.Mesh(tooth, MAT.mark); g.add(m); ticks.push(m); }
+  const frame = new THREE.Matrix4().makeBasis(V3(...bd.ex), V3(...bd.ey), V3(0,0,1)).setPosition(V3(...bd.o));
+  g.matrixAutoUpdate = false; G[bd.body].add(g);
+  return {...bd, g, ticks, N, frame, P:2*bd.L + 2*Math.PI*bd.r};
+});
+function loopPoint(L, r, s){
+  const P = 2*L + 2*Math.PI*r; s = ((s % P) + P) % P;
+  if (s < L) return [s, -r, 0];
+  s -= L; if (s < Math.PI*r){ const a = -Math.PI/2 + s/r; return [L + r*Math.cos(a), r*Math.sin(a), a + Math.PI/2]; }
+  s -= Math.PI*r; if (s < L) return [L - s, r, Math.PI];
+  s -= L; const a = Math.PI/2 + s/r; return [r*Math.cos(a), r*Math.sin(a), a + Math.PI/2];
+}
+const M4 = () => new THREE.Matrix4();
+function rotAbout(axis, ang, p){ const t1 = M4().makeTranslation(p.x,p.y,p.z), r = M4().makeRotationAxis(axis.clone().normalize(), ang), t2 = M4().makeTranslation(-p.x,-p.y,-p.z); return t1.multiply(r).multiply(t2); }
+const wall = new THREE.Mesh(new THREE.SphereGeometry(320, 64, 24, 0, Math.PI*2, 0, 0.62),
+  new THREE.MeshStandardMaterial({color:0xd9a89c, transparent:true, opacity:.08, roughness:.9, side:THREE.DoubleSide, depthWrite:false}));
+wall.position.set(0, -320, MT.ZI); wall.visible = false; scene.add(wall);
+const port = new THREE.Mesh(new THREE.TorusGeometry(10, 1.6, 10, 40), new THREE.MeshBasicMaterial({color:0xd4470f}));
+port.rotation.x = Math.PI/2; port.position.copy(R3); scene.add(port);
+const grid = new THREE.GridHelper(2400, 24, 0x9aa5ad, 0x9aa5ad); grid.position.set(-300, -420, -100); grid.material.opacity=.22; grid.material.transparent=true; scene.add(grid);
+
+// ---------------- coordinate frame at R: axes, arrowheads, 50 mm ticks
+const FR = new THREE.Group(); scene.add(FR);
+const axMat = {x:new THREE.LineBasicMaterial({color:0xe34948}), y:new THREE.LineBasicMaterial({color:0x008300}), z:new THREE.LineBasicMaterial({color:0x2a78d6})};
+const coneMat = {x:new THREE.MeshBasicMaterial({color:0xe34948}), y:new THREE.MeshBasicMaterial({color:0x008300}), z:new THREE.MeshBasicMaterial({color:0x2a78d6})};
+const AXES = {x:{dir:[1,0,0], lo:-150, hi:150, ticks:[-100,-50,50,100]}, y:{dir:[0,1,0], lo:-220, hi:45, ticks:[-200,-150,-100,-50]}, z:{dir:[0,0,1], lo:-150, hi:150, ticks:[-100,-50,50,100]}};
+const AXTAGS = [];
+for (const k of ['x','y','z']){
+  const a = AXES[k], d = V3(...a.dir);
+  FR.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([R3.clone().addScaledVector(d, a.lo), R3.clone().addScaledVector(d, a.hi)]), axMat[k]));
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 9, 14), coneMat[k]);
+  cone.position.copy(R3.clone().addScaledVector(d, a.hi)); cone.quaternion.setFromUnitVectors(V3(0,1,0), d); FR.add(cone);
+  const tp = []; a.ticks.forEach(v => { const c = R3.clone().addScaledVector(d, v); const o = k === 'y' ? V3(3,0,0) : V3(0,3,0);
+    tp.push(c.clone().add(o), c.clone().sub(o)); AXTAGS.push({cls:'tick', text:fx(v,0), p:c.clone().add(o.clone().multiplyScalar(k==='y'?3.2:-3.2)), grp:'ticks'}); });
+  FR.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(tp), axMat[k]));
+  AXTAGS.push({cls:'ax c'+k, text:'+'+k.toUpperCase(), p:R3.clone().addScaledVector(d, a.hi + 12), grp:'axes'});
+}
+AXTAGS.push({cls:'r', text:'R  0, 0, 0', p:R3.clone(), grp:'axes'});
+const rcmDot = new THREE.Mesh(new THREE.SphereGeometry(2.2, 18, 12), new THREE.MeshBasicMaterial({color:0xd4470f, depthTest:false})); rcmDot.position.copy(R3); rcmDot.renderOrder = 10; scene.add(rcmDot);
+
+// ---------------- reachable envelope (straight wrist): outer and inner caps plus edges
+const ENV = new THREE.Group(); scene.add(ENV);
+const envMat = new THREE.LineBasicMaterial({color:0x7d8f9b, transparent:true, opacity:.3});
+(function buildEnvelope(){
+  const rIn = C.LO[2] + C.LT, rOut = C.HI[2] + C.LT, pt = (yaw, th, r) => W(C.tipRel([yaw, th, r - C.LT, 0,0,0]));
+  const seg = (f) => { const pts = []; for (let i=0;i<=28;i++) pts.push(f(i/28)); ENV.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), envMat)); };
+  for (const r of [rIn, rOut]) {
+    for (let a=0;a<=6;a++){ const yaw = C.LO[0] + (C.HI[0]-C.LO[0])*a/6; seg(u => pt(yaw, C.LO[1] + (C.HI[1]-C.LO[1])*u, r)); }
+    for (let b=0;b<=5;b++){ const th = C.LO[1] + (C.HI[1]-C.LO[1])*b/5; seg(u => pt(C.LO[0] + (C.HI[0]-C.LO[0])*u, th, r)); }
+  }
+  for (const yaw of [C.LO[0], C.HI[0]]) for (const th of [C.LO[1], C.HI[1]]) seg(u => pt(yaw, th, rIn + (rOut-rIn)*u));
+})();
+
+// ---------------- task objects: A, B, guides, zones, path, transit, trail, preview marker, pick plane
+const TASK = new THREE.Group(); scene.add(TASK);
+const mkSphere = (r, color, opts={}) => new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), new THREE.MeshBasicMaterial({color, ...opts}));
+const aDot = mkSphere(2.4, 0x3d5a6a), bDot = mkSphere(2.6, 0xd4470f), pvDot = mkSphere(2.0, 0xd4470f, {depthTest:false});
+pvDot.renderOrder = 11; TASK.add(aDot, bDot, pvDot);
+function dashedMat(color){ return new THREE.LineDashedMaterial({color, dashSize:4, gapSize:3}); }
+const GUIDES = {A:[], B:[]};
+for (const w of ['A','B']) for (const k of ['x','z','y']) { const l = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V3(0,0,0),V3(1,0,0)]), dashedMat(axMat[k].color.getHex())); l.frustumCulled = false; TASK.add(l); GUIDES[w].push(l); }
+function setGuide(which, p){
+  const [l1, l2, l3] = GUIDES[which], P1 = W([p[0],0,0]), P2 = W([p[0],0,p[2]]), P3 = W(p);
+  [[l1, R3, P1], [l2, P1, P2], [l3, P2, P3]].forEach(([l, a, b]) => { l.geometry.dispose(); l.geometry = new THREE.BufferGeometry().setFromPoints([a.clone(), b.clone()]); l.computeLineDistances(); });
+}
+const ZONES = new THREE.Group(); TASK.add(ZONES);
+let pathMesh = null, transitLine = null, demoLine = null;
+const TRN = 4000, trPos = new Float32Array(TRN*3); let trCount = 0;
+const trGeo = new THREE.BufferGeometry(); trGeo.setAttribute('position', new THREE.BufferAttribute(trPos, 3)); trGeo.setDrawRange(0, 0);
+const trLine = new THREE.Line(trGeo, new THREE.LineBasicMaterial({color:0xd4470f})); trLine.frustumCulled = false; scene.add(trLine);
+const pickPlane = new THREE.Mesh(new THREE.PlaneGeometry(320, 320), new THREE.MeshBasicMaterial({color:0xd4470f, transparent:true, opacity:.08, side:THREE.DoubleSide, depthWrite:false}));
+pickPlane.rotation.x = -Math.PI/2; pickPlane.visible = false; scene.add(pickPlane);
+
+// ---------------- pose drawing
+const degState = x => ({yaw:x[0]/D2R, theta:x[1]/D2R, q:x[2], roll:x[3]/D2R, psi:x[4]/D2R, chi:x[5]/D2R, grip:x[6]/D2R});
+const toM4 = a => M4().set(...a);
+function drawPose(x){
+  const T = C.bodyT(x), S = degState(x), TM = {};
+  for (const k of BODIES){ TM[k] = toM4(T[k]); G[k].matrix.copy(TM[k]); G[k].matrixWorldNeedsUpdate = true; }
+  for (const m of SPINNERS){ const s = m.userData.spin; m.matrix.copy(rotAbout(V3(...s.a), s.k*S[s.j]*D2R, V3(...s.p))); m.matrixWorldNeedsUpdate = true; }
+  BELTS.forEach(bt => { const off = bt.k*S[bt.j]; bt.g.matrix.copy(bt.frame);
+    bt.ticks.forEach((m, i) => { const [px,py,a] = loopPoint(bt.L, bt.r, i*bt.P/bt.N + off); m.position.set(px, py, (bt.z[0]+bt.z[1])/2); m.rotation.set(0,0,a); }); });
+  const gp = Gs.clone().applyMatrix4(TM.yaw), kp = Ks.clone().applyMatrix4(TM.link1), len = gp.distanceTo(kp);
+  spring.position.copy(gp); spring.scale.set(1, len, 1); spring.quaternion.setFromUnitVectors(V3(0,1,0), kp.clone().sub(gp).normalize());
+}
+function drawGhost(x){
+  const on = !!x; Object.keys(GG).forEach(k => { GG[k].visible = on; });
+  if (!on) return; const T = C.bodyT(x); Object.keys(GG).forEach(k => { GG[k].matrix.copy(toM4(T[k])); GG[k].matrixWorldNeedsUpdate = true; });
+}
+
+// ================================================================ state
+const HOMEX = [0, 0, 100, 0, 0, 0, 0];
+const ST = {
+  x: HOMEX.slice(), coord:'xyz', aFromArm:true, A:C.tipRel(HOMEX), B:[45, -100, 30],
+  path:'avoid', timing:'smooth', duration:2, speed:1, servo:'real', wristB:[0,0,0,0],
+  obstacles:[{c:[22,-112,15], r:9}], demo:0,
+};
+let PLAN = null, EVAL = null, TRANSIT = null, RUN = null, JOG = {v:[0,0,0], keys:new Set(), btn:null}, REC = null, previewT = null, lastRun = null;
+const DEMOS = [];
+const tipNow = () => C.tipRel(ST.x);
+const wristNow = () => [ST.x[3], ST.x[4], ST.x[5], ST.x[6]];
+const taskA = () => ST.aFromArm ? tipNow() : ST.A;
+
+// ---------------- built-in demonstrations (synthetic hand-like moves, in their own start->goal frame)
+function synthDemo(name, dur, shape){
+  const dA = [-30, -118, -12], dB = [30, -108, 12], E = C.frameOf(C.sub(dB, dA)), p = [], t = [];
+  for (let i = 0; i <= 160; i++){
+    const u = C.mj(i/160), base = C.lerp3(dA, dB, u), [a, b] = shape(u);
+    p.push(C.add(base, C.add(C.mul(E[1], a), C.mul(E[2], b)))); t.push(dur*i/160);
+  }
+  return {name, p, t, builtin:true};
+}
+[ synthDemo('Scoop under', 2.2, u => [-24*Math.sin(Math.PI*u), 0]),
+  synthDemo('Lift over', 1.9, u => [20*Math.pow(Math.sin(Math.PI*u), 1.4), 0]),
+  synthDemo('Side sweep', 2.0, u => [0, 18*Math.sin(Math.PI*u)]),
+  synthDemo('Slalom', 2.6, u => [0, 11*Math.sin(2*Math.PI*u)]),
+].forEach(addDemo);
+function addDemo(d){
+  d.model = C.dmpFit(d); if (!d.model) return false;
+  d.len = 0; for (let i = 1; i < d.p.length; i++) d.len += C.nrm(C.sub(d.p[i], d.p[i-1]));
+  d.T = d.t[d.t.length-1] - d.t[0]; DEMOS.push(d); return true;
+}
+
+// ================================================================ inputs (A, B, wrist)
+const LBL = { xyz:[['X','mm','cx'],['Y','mm','cy'],['Z','mm','cz']], jnt:[['yaw','rad',''],['pitch','rad',''],['insertion','mm','']] };
+function buildTrip(id){
+  const box = el(id); box.innerHTML = '';
+  LBL[ST.coord].forEach(([n,u,c], i) => {
+    const lab = document.createElement('label'); lab.innerHTML = `<span><b class="${c}">${n}</b> ${u}</span>`;
+    const inp = document.createElement('input'); inp.type = 'number'; inp.id = `${id}-${i}`; inp.step = u === 'rad' ? '0.01' : '0.5';
+    lab.appendChild(inp); box.appendChild(lab);
+    inp.addEventListener('change', () => onPointInput(id));
+  });
+}
+const WLBL = [['roll',-4.5,4.5],['wrist pitch',-1.39,1.39],['wrist yaw',-1.39,1.39],['grip',0,1.04]];
+(function buildWrist(){ const box = el('w-in'); WLBL.forEach(([n,lo,hi], i) => {
+  const lab = document.createElement('label'); lab.innerHTML = `<span>${n}</span>`;
+  const inp = document.createElement('input'); inp.type = 'number'; inp.id = 'w-'+i; inp.step = '0.05'; inp.min = lo; inp.max = hi; inp.value = '0';
+  lab.appendChild(inp); box.appendChild(lab);
+  inp.addEventListener('change', () => { const v = parseFloat(inp.value); ST.wristB[i] = isNaN(v) ? 0 : Math.min(hi, Math.max(lo, v)); syncInputs(); schedule(); });
+}); })();
+function toJoints(p, wr){ const s = C.ikTip(p, wr); return s.x || [NaN, NaN, NaN]; }
+function pointFromInputs(id){
+  const v = [0,1,2].map(i => parseFloat(el(`${id}-${i}`).value)); if (v.some(isNaN)) return null;
+  if (ST.coord === 'xyz') return v;
+  const wr = id === 'b-in' ? ST.wristB : [0,0,0,0];
+  return C.tipRel([v[0], v[1], v[2], wr[0], wr[1], wr[2]]);
+}
+function onPointInput(id){
+  const p = pointFromInputs(id); if (!p) return;
+  if (id === 'a-in'){ ST.aFromArm = false; el('a-arm').checked = false; ST.A = p; } else ST.B = p;
+  syncInputs(); schedule();
+}
+function setInputs(id, p, wr){
+  const vals = ST.coord === 'xyz' ? p.map(v => v.toFixed(1)) : (() => { const j = toJoints(p, wr); return [j[0].toFixed(4), j[1].toFixed(4), j[2].toFixed(1)]; })();
+  vals.forEach((v, i) => { const e = el(`${id}-${i}`); if (document.activeElement !== e) e.value = v; });
+}
+function convText(p, wr){
+  if (ST.coord === 'xyz'){ const j = toJoints(p, wr); return `= yaw ${sg(j[0],4)} rad · pitch ${sg(j[1],4)} rad · insertion ${j[2].toFixed(1)} mm`; }
+  return `= X ${fx(p[0])} · Y ${fx(p[1])} · Z ${fx(p[2])} mm from R`;
+}
+function reachPill(id, p, wr){
+  const r = C.reach(p, wr), e = el(id);
+  if (r.ok){ e.className = 'pill ok'; e.textContent = 'Reachable'; e.title = ''; }
+  else { const straight = C.reach(p, [wr[0],0,0]); const il = straight.ok;
+    e.className = il ? 'pill warn' : 'pill bad'; e.textContent = il ? 'Wrist straightened' : 'Out of reach'; e.title = r.issues.join('; '); }
+  return r;
+}
+function syncInputs(){
+  const A = taskA(), wa = ST.aFromArm ? wristNow() : [0,0,0,0];
+  setInputs('a-in', A, wa); setInputs('b-in', ST.B, ST.wristB);
+  [0,1,2].forEach(i => { el(`a-in-${i}`).readOnly = ST.aFromArm; el(`a-in-${i}`).style.opacity = ST.aFromArm ? .7 : 1; });
+  el('a-conv').textContent = convText(A, wa) + (ST.aFromArm ? '  (follows the arm)' : '');
+  el('b-conv').textContent = convText(ST.B, ST.wristB);
+  reachPill('a-pill', A, wa); reachPill('b-pill', ST.B, ST.wristB);
+  ST.wristB.forEach((v, i) => { const e = el('w-'+i); if (document.activeElement !== e) e.value = (+v).toFixed(2); });
+  el('path').value = ST.path; el('timing').value = ST.timing; el('dur').value = ST.duration; el('speed').value = String(ST.speed); el('servo').value = ST.servo;
+  el('demo-row').hidden = ST.path !== 'learned'; el('dur-row').hidden = ST.timing !== 'fixed';
+  el('demosel').innerHTML = DEMOS.map((d, i) => `<option value="${i}">${esc(d.name)} · ${d.T.toFixed(1)} s · ${d.len.toFixed(0)} mm</option>`).join(''); el('demosel').value = String(ST.demo);
+  [...el('timing').options].forEach(o => { if (o.value === 'demo') o.disabled = ST.path !== 'learned'; });
+  renderZones(); renderDemos(); updateMarkers();
+  if (document.activeElement !== el('taskjson')) el('taskjson').value = JSON.stringify(taskJSON(), null, 2);
+}
+function setCoord(c){ ST.coord = c; el('m-xyz').setAttribute('aria-pressed', c === 'xyz'); el('m-jnt').setAttribute('aria-pressed', c === 'jnt'); buildTrip('a-in'); buildTrip('b-in'); syncInputs(); }
+el('m-xyz').addEventListener('click', () => setCoord('xyz'));
+el('m-jnt').addEventListener('click', () => setCoord('jnt'));
+el('a-arm').addEventListener('change', e => { ST.aFromArm = e.target.checked; if (!ST.aFromArm) ST.A = tipNow(); syncInputs(); schedule(); });
+el('path').addEventListener('change', e => { ST.path = e.target.value; if (ST.path !== 'learned' && ST.timing === 'demo') ST.timing = 'smooth'; if (ST.path === 'learned' && !DEMOS.length) ST.path = 'straight'; syncInputs(); schedule(); });
+el('demosel').addEventListener('change', e => { ST.demo = +e.target.value; syncInputs(); schedule(); });
+el('timing').addEventListener('change', e => { ST.timing = e.target.value; syncInputs(); schedule(); });
+el('dur').addEventListener('change', e => { const v = parseFloat(e.target.value); ST.duration = isNaN(v) ? 2 : Math.max(0.1, v); schedule(); });
+el('speed').addEventListener('change', e => { ST.speed = parseFloat(e.target.value); schedule(); });
+el('servo').addEventListener('change', e => { ST.servo = e.target.value; schedule(); });
+el('b-snap').addEventListener('click', () => { ST.B = C.snap(ST.B); syncInputs(); schedule(); log('B snapped to ' + fp(ST.B)); });
+el('b-swap').addEventListener('click', () => { const a = taskA(); ST.aFromArm = false; el('a-arm').checked = false; ST.A = ST.B.slice(); ST.B = a; syncInputs(); schedule(); });
+
+// ---------------- keep-out zones
+function renderZones(){
+  const box = el('zones');
+  if (!ST.obstacles.length){ box.innerHTML = '<p class="note">No zones. The path is free.</p>'; }
+  else {
+    const keep = document.activeElement && document.activeElement.closest && document.activeElement.closest('#zones');
+    if (keep){ updateZones3d(); return; }
+    box.innerHTML = `<div class="zrow zhead"><span></span><span>x</span><span>y</span><span>z</span><span>radius</span><span></span></div>` +
+      ST.obstacles.map((o, i) => `<div class="zrow"><b>K${i+1}</b>${[0,1,2].map(j => `<input type="number" step="1" id="z${i}-${j}" value="${o.c[j].toFixed(1)}" aria-label="Zone ${i+1} ${'xyz'[j]}">`).join('')}<input type="number" step="0.5" min="1" id="z${i}-r" value="${o.r.toFixed(1)}" aria-label="Zone ${i+1} radius"><button type="button" class="small" data-zdel="${i}" aria-label="Remove zone ${i+1}">✕</button></div>`).join('');
+    box.querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
+      const [i, j] = inp.id.slice(1).split('-'), v = parseFloat(inp.value); if (isNaN(v)) return;
+      if (j === 'r') ST.obstacles[+i].r = Math.max(1, v); else ST.obstacles[+i].c[+j] = v;
+      updateZones3d(); schedule(); }));
+    box.querySelectorAll('[data-zdel]').forEach(b => b.addEventListener('click', () => { ST.obstacles.splice(+b.dataset.zdel, 1); renderZones(); updateZones3d(); schedule(); }));
+  }
+  updateZones3d();
+}
+const zoneMat = new THREE.MeshBasicMaterial({color:0xd03b3b, transparent:true, opacity:.22, depthWrite:false});
+const zoneWire = new THREE.MeshBasicMaterial({color:0xd03b3b, wireframe:true, transparent:true, opacity:.35});
+function updateZones3d(){
+  while (ZONES.children.length) ZONES.remove(ZONES.children[0]);
+  ST.obstacles.forEach(o => { const g = new THREE.SphereGeometry(o.r, 28, 18); const m = new THREE.Mesh(g, zoneMat), w = new THREE.Mesh(g, zoneWire);
+    m.position.copy(W(o.c)); w.position.copy(W(o.c)); ZONES.add(m, w); });
+}
+el('z-add').addEventListener('click', () => { const mid = C.lerp3(taskA(), ST.B, 0.5); ST.obstacles.push({c:mid.map(v => Math.round(v*2)/2), r:8}); renderZones(); schedule(); });
+el('z-clear').addEventListener('click', () => { ST.obstacles = []; renderZones(); schedule(); });
+
+// ================================================================ planning
+let planTimer = null, planSeq = 0;
+function schedule(ms = 180){ clearTimeout(planTimer); planTimer = setTimeout(() => { planTimer = null; replan(); }, ms); if (performance.now() > flashUntil && !RUN) el('state').textContent = 'Planning…'; }
+function buildTask(A, B, extra = {}){
+  const d = DEMOS[ST.demo];
+  return { A, B, path:ST.path, timing:ST.timing, duration:ST.duration, speed:ST.speed, obstacles:ST.obstacles.map(o => ({c:o.c.slice(), r:o.r})),
+    wristStart: ST.aFromArm ? wristNow() : [0,0,0,0], wristEnd: ST.wristB.slice(), demoModel: d ? d.model : null, seed: 7, ...extra };
+}
+function replan(){
+  if (RUN) return;
+  planSeq++;
+  const A = taskA(), task = buildTask(A, ST.B);
+  PLAN = C.plan(task); EVAL = PLAN.ok ? C.evaluate(PLAN, ST.servo === 'real') : {pass:false, reasons:PLAN.issues.slice(), warnings:[], metrics:null};
+  // transit from the arm to a typed A
+  TRANSIT = null;
+  if (!ST.aFromArm && C.nrm(C.sub(tipNow(), A)) > 0.05 && PLAN.ok){
+    const tr = C.plan({A:tipNow(), B:A, path: ST.obstacles.length ? 'avoid' : 'arc', timing:'smooth', speed:ST.speed, obstacles:ST.obstacles, wristStart:wristNow(), wristEnd:[0,0,0,0]});
+    if (tr.ok){ C.evaluate(tr, ST.servo === 'real'); TRANSIT = tr; }
+    else EVAL.reasons.push('Cannot reach A from where the arm is: ' + tr.issues[0]);
+  }
+  previewT = null; el('scrub').value = 1000;
+  drawPlan(); renderResult(); renderCharts(); renderOutputs();
+  if (performance.now() > flashUntil){
+    el('state').textContent = PLAN.ok ? (EVAL.pass ? 'Ready · plan passes' : 'Ready · plan has problems') : 'No valid plan';
+    el('state').style.color = PLAN.ok && EVAL.pass ? '' : 'var(--bad)'; }
+}
+
+// ---------------- 3D plan drawing
+function rampColor(f){ const a = new THREE.Color(css('--spd-lo') || '#86b6ef'), b = new THREE.Color(css('--spd-hi') || '#104281'); return a.lerp(b, Math.max(0, Math.min(1, f))); }
+function drawPlan(){
+  if (pathMesh){ TASK.remove(pathMesh); pathMesh.geometry.dispose(); pathMesh = null; }
+  if (transitLine){ TASK.remove(transitLine); transitLine = null; }
+  if (demoLine){ TASK.remove(demoLine); demoLine = null; }
+  const pts = PLAN.traj ? PLAN.traj.P : (PLAN.path ? PLAN.path.P : null);
+  el('spdmax').textContent = '—';
+  if (pts && pts.length > 1){
+    const step = Math.max(1, Math.floor(pts.length/360)), sel = [];
+    for (let i = 0; i < pts.length; i += step) if (!sel.length || C.nrm(C.sub(pts[i], sel[sel.length-1])) > 0.05) sel.push(pts[i]);
+    if (C.nrm(C.sub(pts[pts.length-1], sel[sel.length-1])) > 0.01) sel.push(pts[pts.length-1]);
+    if (sel.length < 2) sel.push(C.add(sel[0], [0, 0.01, 0]));
+    const curve = new THREE.CatmullRomCurve3(sel.map(W)), segs = Math.min(500, sel.length*2);
+    const geo = new THREE.TubeGeometry(curve, segs, 0.75, 8, false);
+    const col = new Float32Array(geo.attributes.position.count*3);
+    let spd = null, smax = 1;
+    if (PLAN.traj){ const P = PLAN.traj.P, n = P.length, L = [0]; spd = [0];
+      for (let i = 1; i < n; i++){ const d = C.nrm(C.sub(P[i], P[i-1])); L.push(L[i-1] + d); spd.push(d / C.DT); }
+      smax = Math.max(1e-6, ...spd); el('spdmax').textContent = '0 – ' + smax.toFixed(0) + ' mm/s';
+      const Lt = L[n-1] || 1;
+      for (let r = 0; r <= segs; r++){ const target = r/segs*Lt; let k = 0; while (k < n-1 && L[k+1] < target) k++;
+        const c = rampColor(spd[k]/smax); for (let v = 0; v <= 8; v++){ const idx = (r*9 + v)*3; col[idx] = c.r; col[idx+1] = c.g; col[idx+2] = c.b; } }
+    } else { const c = new THREE.Color(css('--zone') || '#d03b3b'); for (let i = 0; i < col.length; i += 3){ col[i] = c.r; col[i+1] = c.g; col[i+2] = c.b; } el('spdmax').textContent = 'no valid timing'; }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    pathMesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({vertexColors:true})); TASK.add(pathMesh);
+  }
+  if (TRANSIT && TRANSIT.traj){ transitLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(TRANSIT.traj.P.filter((_, i) => i % 3 === 0).map(W)), dashedMat(0x7d8f9b)); transitLine.computeLineDistances(); TASK.add(transitLine); }
+  if (ST.path === 'learned' && DEMOS[ST.demo]){ demoLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(DEMOS[ST.demo].p.map(W)), new THREE.LineDashedMaterial({color:0x7d8f9b, dashSize:1.5, gapSize:2})); demoLine.computeLineDistances(); TASK.add(demoLine); }
+  updateMarkers();
+}
+function endPose(){ return PLAN && PLAN.traj ? PLAN.traj.X[PLAN.traj.X.length-1] : null; }
+function updateMarkers(){
+  const A = RUN ? RUN.A : taskA(); aDot.position.copy(W(A)); bDot.position.copy(W(ST.B));
+  setGuide('A', A); setGuide('B', ST.B);
+  pickPlane.position.set(ST.B[0], ST.B[1], ST.B[2] + MT.ZI);
+}
+
+// ================================================================ result panel
+const pct = v => (v*100).toFixed(0) + ' %';
+const um = mm => mm < 1 ? (mm*1000).toFixed(mm < 0.01 ? 1 : 0) + ' µm' : mm.toFixed(2) + ' mm';
+function renderResult(){
+  const pill = el('res-pill'), m = EVAL.metrics;
+  pill.className = 'pill ' + (EVAL.pass ? 'ok' : 'bad'); pill.textContent = EVAL.pass ? 'PASS' : (PLAN.ok ? 'FAIL' : 'NO PLAN');
+  el('res-head').textContent = m ? `${m.duration.toFixed(2)} s · ${m.length.toFixed(1)} mm` : 'No trajectory';
+  el('res-sub').textContent = m ? `${PLAN.done ? 'executed · ' : ''}${({straight:'straight line', arc:'joint arc', avoid: PLAN.avoidStraight ? 'straight, already clear' : 'optimised detour', learned:'learned path'})[PLAN.task.path]}, ${({smooth:'minimum jerk', fastest:'time-optimal', fixed:'fixed duration', demo:'demo pace'})[PLAN.task.timing]}` : '';
+  const T = m ? m.torque : null;
+  el('res-dl').innerHTML = m ? [
+    ['Final tip error', um(m.endErr)], ['Max tracking error', um(m.track)],
+    ['Peak joint speed', `${pct(m.peakSpeed)} · ${m.peakSpeedJoint}`], ['Peak joint acceleration', `${pct(m.peakAcc)} · ${m.peakAccJoint}`],
+    ['Yaw / pitch drive', `${T[0].toFixed(1)} / ${T[1].toFixed(1)} N·m`], ['Insertion drive', `${T[2].toFixed(1)} N`],
+    ['Peak load vs rating', pct(m.worstTorquePct)], ['Shaft clearance', ST.obstacles.length ? m.clearance.toFixed(1) + ' mm' : 'no zones'],
+    ['Remote center drift', m.rcm.toExponential(1) + ' mm'], ['Planning time', m.planMs.toFixed(0) + ' ms'],
+    ...(TRANSIT ? [['Transit to A first', TRANSIT.T.toFixed(2) + ' s']] : []),
+  ].map(([a,b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('') : '';
+  const msgs = [...(EVAL.reasons||[]).map(t => ['bad', t]), ...(EVAL.warnings||[]).map(t => ['warn', t]), ...(PLAN.notes||[]).map(t => ['note', t])];
+  if (PLAN.bezier && !PLAN.avoidStraight && !PLAN.issues.length && ST.obstacles.length) msgs.push(['note', `Detour control points ${fp(PLAN.bezier[1])} and ${fp(PLAN.bezier[2])} mm.`]);
+  el('res-msgs').innerHTML = msgs.map(([c, t]) => `<li class="${c}">${esc(t.charAt(0).toUpperCase() + t.slice(1))}</li>`).join('');
+}
+
+// ================================================================ charts (SVG, synced crosshair)
+const SVGNS = 'http://www.w3.org/2000/svg';
+const CH = [
+  {id:'tip', title:'Tool tip position', unit:'mm', series:[['X','x'],['Y','y'],['Z','z']]},
+  {id:'ang', title:'Arm angles', unit:'rad', series:[['yaw','yaw'],['pitch','pitch']]},
+  {id:'ins', title:'Insertion', unit:'mm', series:[['insertion','ins']]},
+  {id:'spd', title:'Joint speed', unit:'% of limit', series:[['yaw','yaw'],['pitch','pitch'],['insertion','ins']], ref:[100,'limit'], zero:true},
+  {id:'load', title:'Drive load', unit:'% of rated torque', series:[['yaw','yaw'],['pitch','pitch'],['insertion','ins']], ref:[100,'rated'], zero:true},
+  {id:'err', title:'Servo tracking error', unit:'µm', series:[['tip error','err']], zero:true},
+];
+const chartBox = el('charts');
+CH.forEach(c => {
+  const card = document.createElement('div'); card.className = 'card';
+  card.innerHTML = `<div class="ct"><h3>${c.title}</h3><span>${c.unit}</span></div>` +
+    (c.series.length > 1 ? `<div class="lg">${c.series.map(([n,k]) => `<span><i class="b-${k}"></i>${n}</span>`).join('')}</div>` : '') +
+    `<div class="chartbox"><svg aria-label="${c.title} over time"></svg><div class="empty" hidden></div></div>`;
+  chartBox.appendChild(card); c.card = card; c.svg = card.querySelector('svg'); c.emptyEl = card.querySelector('.empty');
+  c.tip = document.createElement('div'); c.tip.className = 'tip'; c.tip.hidden = true; card.querySelector('.chartbox').appendChild(c.tip);
+  c.svg.addEventListener('pointermove', e => { if (!c.geo) return; const r = c.svg.getBoundingClientRect(); const t = c.geo.inv(e.clientX - r.left); setPreview(t, c); });
+  c.svg.addEventListener('pointerleave', () => { c.tip.hidden = true; setPreview(null); });
+});
+function niceTicks(lo, hi, n){
+  const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw/mag;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+  const a = Math.floor(lo/step + 1e-9)*step, b = Math.ceil(hi/step - 1e-9)*step, out = [];
+  for (let v = a; v <= b + step*1e-6; v += step) out.push(+v.toFixed(10)); return out;
+}
+function chartData(){
+  if (!EVAL || !EVAL.metrics) return null;
+  const tr = PLAN.traj, n = tr.t.length, d = {t:tr.t};
+  d.tip = [0,1,2].map(j => tr.P.map(p => p[j]));
+  d.ang = [0,1].map(j => tr.X.map(x => x[j]));
+  d.ins = [tr.X.map(x => x[2])];
+  d.spd = [0,1,2].map(j => tr.XD.map(v => Math.abs(v[j]) / C.VLIM[j] * 100));
+  d.load = [0,1,2].map(j => tr.TAU.map(v => Math.abs(v[j]) / C.DRIVE.rated[j] * 100));
+  d.err = [tr.ERR.slice(0, n).map(v => v*1000)];
+  return d;
+}
+let CD = null;
+function renderCharts(){
+  CD = chartData();
+  CH.forEach(c => {
+    while (c.svg.firstChild) c.svg.removeChild(c.svg.firstChild);
+    c.geo = null;
+    if (!CD){ c.emptyEl.hidden = false; c.emptyEl.textContent = 'No trajectory. ' + (EVAL && EVAL.reasons[0] ? EVAL.reasons[0].charAt(0).toUpperCase() + EVAL.reasons[0].slice(1) + '.' : ''); return; }
+    c.emptyEl.hidden = true;
+    const Wd = c.svg.clientWidth || 320, H = 160, m = {l:44, r:46, t:8, b:22}, t = CD.t, T = t[t.length-1] || 1, S = CD[c.id];
+    let lo = Infinity, hi = -Infinity; S.forEach(s => s.forEach(v => { if (v < lo) lo = v; if (v > hi) hi = v; }));
+    if (c.ref){ hi = Math.max(hi, c.ref[0]); }
+    if (c.zero) lo = Math.min(lo, 0);
+    if (hi - lo < 1e-6){ const mid = (hi+lo)/2, pad = Math.max(Math.abs(mid)*0.05, c.unit === 'rad' ? 0.05 : 1); lo = mid - pad; hi = mid + pad; }
+    const yt = niceTicks(lo, hi, 4); lo = yt[0]; hi = yt[yt.length-1];
+    const X = v => m.l + v/T*(Wd - m.l - m.r), Y = v => m.t + (1 - (v - lo)/(hi - lo))*(H - m.t - m.b);
+    const mk = (tag, attrs, parent = c.svg) => { const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
+    const gg = mk('g', {class:'grid'});
+    const dec = c.unit === 'rad' ? 2 : (hi - lo) < 5 ? 1 : 0;
+    yt.forEach(v => { mk('line', {x1:m.l, x2:Wd - m.r, y1:Y(v), y2:Y(v)}, gg); const tx = mk('text', {x:m.l - 6, y:Y(v) + 3.5, 'text-anchor':'end'}); tx.textContent = fx(v, dec); });
+    const xt = niceTicks(0, T, 4).filter(v => v <= T + 1e-9);
+    xt.forEach(v => { const tx = mk('text', {x:X(v), y:H - 6, 'text-anchor':'middle'}); tx.textContent = v.toFixed(T < 2 ? 1 : 0) + (v === xt[xt.length-1] ? ' s' : ''); });
+    mk('line', {class:'axis', x1:m.l, x2:Wd - m.r, y1:H - m.b, y2:H - m.b});
+    if (c.ref){ mk('line', {class:'ref', x1:m.l, x2:Wd - m.r, y1:Y(c.ref[0]), y2:Y(c.ref[0])}); const tx = mk('text', {x:Wd - m.r + 4, y:Y(c.ref[0]) + 3.5}); tx.textContent = c.ref[1]; }
+    const step = Math.max(1, Math.floor(t.length / (Wd*1.2)));
+    const ends = [];
+    S.forEach((s, si) => {
+      let d = ''; for (let i = 0; i < s.length; i += step) d += (d ? 'L' : 'M') + X(t[i]).toFixed(1) + ',' + Y(s[i]).toFixed(1);
+      d += 'L' + X(t[s.length-1]).toFixed(1) + ',' + Y(s[s.length-1]).toFixed(1);
+      mk('path', {class:'ln s-' + c.series[si][1], d});
+      ends.push({y:Y(s[s.length-1]), name:c.series[si][0], k:c.series[si][1]});
+    });
+    if (S.length > 1){ ends.sort((a, b) => a.y - b.y); for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i-1].y < 11) ends[i].y = ends[i-1].y + 11;
+      ends.forEach(e => { const tx = mk('text', {class:'lbl', x:Wd - m.r + 5, y:Math.min(H - m.b, e.y) + 3.5}); tx.textContent = e.name === 'insertion' ? 'ins' : e.name; }); }
+    c.cross = mk('g', {}); c.play = mk('line', {class:'play', x1:-10, x2:-10, y1:m.t, y2:H - m.b});
+    c.geo = {X, Y, T, m, Wd, H, inv: px => Math.max(0, Math.min(T, (px - m.l)/(Wd - m.l - m.r)*T))};
+  });
+}
+function idxAt(t){ return Math.max(0, Math.min(CD.t.length - 1, Math.round(t / C.DT))); }
+function setPreview(t, src){
+  previewT = t;
+  CH.forEach(c => { if (!c.geo) return; while (c.cross.firstChild) c.cross.removeChild(c.cross.firstChild);
+    if (t == null) return; const i = idxAt(t), x = c.geo.X(CD.t[i]);
+    const l = document.createElementNS(SVGNS, 'line'); l.setAttribute('class', 'cross'); l.setAttribute('x1', x); l.setAttribute('x2', x); l.setAttribute('y1', c.geo.m.t); l.setAttribute('y2', c.geo.H - c.geo.m.b); c.cross.appendChild(l);
+    CD[c.id].forEach((s, si) => { const d = document.createElementNS(SVGNS, 'circle'); d.setAttribute('class', 'dot f-' + c.series[si][1]); d.setAttribute('cx', x); d.setAttribute('cy', c.geo.Y(s[i])); d.setAttribute('r', 4); c.cross.appendChild(d); });
+  });
+  CH.forEach(c => { if (c !== src) c.tip.hidden = true; });
+  if (src && t != null){ const i = idxAt(t), dec = src.unit === 'rad' ? 4 : 1;
+    src.tip.innerHTML = `<span>t = ${CD.t[i].toFixed(3)} s</span>` + CD[src.id].map((s, si) => `<span><i class="b-${src.series[si][1]}"></i>${src.series[si][0]}  ${fx(s[i], dec)} ${src.unit === '% of limit' || src.unit === '% of rated torque' ? '%' : src.unit}</span>`).join('');
+    src.tip.hidden = false; const x = src.geo.X(CD.t[i]); src.tip.style.left = (x > src.geo.Wd*0.6 ? x - src.tip.offsetWidth - 10 : x + 10) + 'px'; src.tip.style.top = '6px'; }
+  if (t != null && CD) el('scrub').value = Math.round(t / CD.t[CD.t.length-1] * 1000);
+}
+let rzT = null; window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(renderCharts, 150); });
+
+// ================================================================ run / stop / preview scrub
+function sampleTr(tr, t){
+  const n = tr.Xa.length, f = t / C.DT, i = Math.min(n - 1, Math.floor(f)), j = Math.min(n - 1, i + 1), a = f - i;
+  return tr.Xa[i].map((v, k) => v + (tr.Xa[j][k] - v) * (j === i ? 0 : a));
+}
+function run(){
+  if (RUN) return;
+  if (planTimer){ clearTimeout(planTimer); planTimer = null; replan(); }
+  const first = PLAN && PLAN.ok ? (TRANSIT ? TRANSIT.traj.X[0] : PLAN.traj.X[0]) : null;
+  if (PLAN && (PLAN.done || (first && first.some((v, i) => Math.abs(v - ST.x[i]) > 1e-4)))) replan();     // the arm moved since this plan was made
+  if (!PLAN || !PLAN.ok){ flashState('Nothing to run: ' + (EVAL.reasons[0] || 'no plan'), true); log('run: no valid plan. ' + (EVAL.reasons[0] || ''), 'err'); return; }
+  const segs = []; if (TRANSIT) segs.push({tr:TRANSIT.traj, kind:'transit'}); segs.push({tr:PLAN.traj, kind:'move'});
+  RUN = {segs, k:0, t:0, A:taskA()}; trCount = 0; trGeo.setDrawRange(0, 0); setPreview(null);
+  el('run').disabled = true; log(`run: ${TRANSIT ? 'transit to A, then ' : ''}${PLAN.T.toFixed(2)} s move to ${fp(ST.B)}`);
+}
+function stopRun(msg){
+  if (!RUN) return; RUN = null; el('run').disabled = false; CH.forEach(c => { if (c.play){ c.play.setAttribute('x1', -10); c.play.setAttribute('x2', -10); } });
+  flashState(msg || 'Stopped. The arm holds this pose.'); syncInputs(); schedule(0);
+}
+el('run').addEventListener('click', run);
+el('stop').addEventListener('click', () => { if (RUN) { stopRun(); log('stop: halted mid-move'); } else { JOG.keys.clear(); JOG.btn = null; } });
+let flashUntil = 0;
+function flashState(t, bad){ el('state').textContent = t; el('state').style.color = bad ? 'var(--bad)' : ''; flashUntil = performance.now() + 2500; }
+el('scrub').addEventListener('input', e => { if (!CD || RUN) return; const t = +e.target.value/1000 * CD.t[CD.t.length-1]; setPreview(t); });
+el('viewsel').addEventListener('change', e => { curView = e.target.value; userMoved = false; fitView(); });
+el('fit').addEventListener('click', () => { userMoved = false; fitView(); });
+['ly-axes','ly-guides','ly-tags','ly-env','ly-wall'].forEach(id => el(id).addEventListener('change', applyLayers));
+function applyLayers(){ FR.visible = el('ly-axes').checked; ENV.visible = el('ly-env').checked; wall.visible = el('ly-wall').checked;
+  GUIDES.A.concat(GUIDES.B).forEach(l => l.visible = el('ly-guides').checked); }
+
+// ================================================================ teach: jog + record
+const DIRS = {'x+':[1,0,0], 'x-':[-1,0,0], 'y+':[0,1,0], 'y-':[0,-1,0], 'z+':[0,0,1], 'z-':[0,0,-1]};
+const KEYMAP = {a:'x-', d:'x+', w:'y+', s:'y-', q:'z-', e:'z+'};
+document.querySelectorAll('#pad button').forEach(b => {
+  b.addEventListener('pointerdown', e => { e.preventDefault(); JOG.btn = b.dataset.v; b.classList.add('on'); });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (JOG.btn === b.dataset.v) JOG.btn = null; b.classList.remove('on'); }));
+});
+const typing = () => { const a = document.activeElement; return a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT'); };
+window.addEventListener('keydown', e => {
+  if (typing() || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (KEYMAP[k]){ JOG.keys.add(KEYMAP[k]); e.preventDefault(); document.querySelector(`#pad [data-v="${KEYMAP[k]}"]`)?.classList.add('on'); }
+  if (k === 'r' && !e.repeat){ run(); e.preventDefault(); }
+  if (k === ' '){ if (RUN) stopRun(); e.preventDefault(); }
+});
+window.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (KEYMAP[k]){ JOG.keys.delete(KEYMAP[k]); document.querySelector(`#pad [data-v="${KEYMAP[k]}"]`)?.classList.remove('on'); } });
+window.addEventListener('blur', () => { JOG.keys.clear(); JOG.btn = null; document.querySelectorAll('#pad button').forEach(b => b.classList.remove('on')); });
+let jogIdle = 0, jogWasActive = false;
+function jogStep(dt){
+  const dir = [0,0,0]; const act = [...JOG.keys, ...(JOG.btn ? [JOG.btn] : [])];
+  act.forEach(a => { const d = DIRS[a]; dir[0] += d[0]; dir[1] += d[1]; dir[2] += d[2]; });
+  const n = C.nrm(dir), spd = parseFloat(el('jogspd').value), target = n > 0 ? C.mul(dir, spd/n) : [0,0,0];
+  const a = 1 - Math.exp(-dt/0.12); JOG.v = JOG.v.map((v, i) => v + (target[i] - v)*a);
+  if (C.nrm(JOG.v) < 0.02){ JOG.v = [0,0,0]; if (jogWasActive){ jogIdle += dt; if (jogIdle > 0.25){ jogWasActive = false; syncInputs(); schedule(0); } } return; }
+  if (RUN) return;
+  jogWasActive = true; jogIdle = 0;
+  const p = C.add(tipNow(), C.mul(JOG.v, dt)), wr = wristNow(), s = C.ikTip(p, [wr[0], wr[1], wr[2]], ST.x);
+  const ok = s.x && s.err < 1e-6 && !C.limitIssues([...s.x, 0,0,0,0], 0, 3).length && !(s.x[2] < C.WQMIN && (Math.abs(wr[1]) > 1e-6 || Math.abs(wr[2]) > 1e-6 || wr[3] > 1e-6))
+    && !ST.obstacles.some(o => C.clearance(p, [o]) < 0);
+  if (ok){ ST.x = [...s.x, ...wr]; if (ST.aFromArm){ setInputs('a-in', tipNow(), wristNow()); updateMarkers(); }
+    el('jog-msg').textContent = `Jogging at ${C.nrm(JOG.v).toFixed(1)} mm/s`; el('jog-msg').style.color = ''; }
+  else { JOG.v = [0,0,0]; el('jog-msg').textContent = 'Stopped at a joint limit, the wrist interlock or a keep-out zone.'; el('jog-msg').style.color = 'var(--warn)'; }
+}
+el('set-a').addEventListener('click', () => { ST.aFromArm = false; el('a-arm').checked = false; ST.A = tipNow(); syncInputs(); schedule(); log('A = ' + fp(ST.A)); });
+el('set-b').addEventListener('click', () => { ST.B = tipNow(); ST.wristB = [ST.x[3], ST.x[4], ST.x[5], ST.x[6]]; syncInputs(); schedule(); log('B = ' + fp(ST.B)); });
+el('home').addEventListener('click', () => goTo(C.tipRel(HOMEX), [0,0,0,0]));
+function goTo(p, wr){ ST.aFromArm = true; el('a-arm').checked = true; ST.B = p; if (wr) ST.wristB = wr; syncInputs(); replan(); run(); }
+el('rec').addEventListener('click', () => {
+  if (!REC){ REC = {p:[tipNow()], t:[0], t0:performance.now()}; el('rec').textContent = '■ Stop recording'; el('rec').classList.add('on'); }
+  else finishRecording();
+});
+function recordStep(){ if (!REC) return; const t = (performance.now() - REC.t0)/1000; const p = tipNow();
+  if (t - REC.t[REC.t.length-1] >= 0.02){ REC.p.push(p); REC.t.push(t); }
+  let len = 0; for (let i = 1; i < REC.p.length; i++) len += C.nrm(C.sub(REC.p[i], REC.p[i-1]));
+  el('rec-msg').textContent = `Recording ${t.toFixed(1)} s · ${len.toFixed(0)} mm`; }
+function finishRecording(){
+  const R = REC; REC = null; el('rec').textContent = '● Record'; el('rec').classList.remove('on');
+  // trim the still parts at both ends
+  const moved = i => C.nrm(C.sub(R.p[i], R.p[Math.max(0, i-1)])) > 0.004;
+  let a = 0, b = R.p.length - 1; while (a < b && !moved(a+1)) a++; while (b > a && !moved(b)) b--;
+  const p = R.p.slice(a, b+1), t = R.t.slice(a, b+1).map(v => v - R.t[a]);
+  const d = {name:`My demo ${DEMOS.filter(x => !x.builtin).length + 1}`, p, t};
+  const chord = p.length > 1 ? C.nrm(C.sub(p[p.length-1], p[0])) : 0;
+  if (p.length < 10 || chord < 6 || !addDemo(d)){ el('rec-msg').textContent = 'Too short to learn from. Move at least 6 mm between start and end.'; return; }
+  ST.demo = DEMOS.length - 1; ST.path = 'learned'; if (ST.timing === 'fixed') ST.timing = 'demo';
+  el('rec-msg').textContent = `Saved ${d.name}: ${d.T.toFixed(1)} s, ${d.len.toFixed(0)} mm. Path set to learned.`;
+  log(`recorded ${d.name} (${p.length} samples)`); syncInputs(); schedule(0);
+}
+function renderDemos(){
+  el('demos').innerHTML = DEMOS.map((d, i) => `<div class="demo${ST.path === 'learned' && ST.demo === i ? ' sel' : ''}"><span>${esc(d.name)}${d.builtin ? ' <span class="pill mut">built-in</span>' : ''}</span>
+    <div class="btns"><button type="button" class="small" data-use="${i}">Use</button><button type="button" class="small" data-play="${i}">Replay</button>${d.builtin ? '' : `<button type="button" class="small" data-del="${i}" aria-label="Delete ${esc(d.name)}">✕</button>`}</div>
+    <span class="sub">${d.T.toFixed(1)} s · ${d.len.toFixed(0)} mm · ${d.p.length} samples</span></div>`).join('');
+  el('demos').querySelectorAll('[data-use]').forEach(b => b.addEventListener('click', () => { ST.demo = +b.dataset.use; ST.path = 'learned'; ST.timing = 'demo'; syncInputs(); schedule(0); }));
+  el('demos').querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { const i = +b.dataset.del; DEMOS.splice(i, 1); if (ST.demo >= DEMOS.length) ST.demo = 0; syncInputs(); schedule(0); }));
+  el('demos').querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => replayDemo(+b.dataset.play)));
+}
+function replayDemo(i){ // run the demonstration exactly as recorded: plan to its start, then follow it at its own pace
+  const d = DEMOS[i]; ST.aFromArm = true; el('a-arm').checked = true;
+  const saved = {path:ST.path, timing:ST.timing, demo:ST.demo};
+  ST.path = 'learned'; ST.timing = 'demo'; ST.demo = i;
+  const toStart = C.plan({A:tipNow(), B:d.p[0], path:'arc', timing:'smooth', speed:ST.speed, obstacles:[], wristStart:wristNow(), wristEnd:[0,0,0,0]});
+  if (!toStart.ok){ flashState('Demo start is out of reach', true); Object.assign(ST, saved); return; }
+  C.evaluate(toStart, ST.servo === 'real');
+  const own = C.plan({A:d.p[0], B:d.p[d.p.length-1], path:'learned', timing:'demo', demoModel:d.model, speed:1, obstacles:[], wristStart:[0,0,0,0], wristEnd:[0,0,0,0]});
+  if (!own.ok){ flashState('Demo leaves the joint range', true); Object.assign(ST, saved); return; }
+  C.evaluate(own, ST.servo === 'real');
+  RUN = {segs:[{tr:toStart.traj, kind:'transit'}, {tr:own.traj, kind:'demo'}], k:0, t:0, A:taskA()}; trCount = 0; el('run').disabled = true;
+  log(`replay ${d.name}`);
+}
+
+// ================================================================ test bench
+let SUITE = null; const TROWS = [];
+el('suite').addEventListener('change', () => { el('count-row').hidden = el('suite').value === 'sweep'; });
+el('t-run').addEventListener('click', () => runSuite(el('suite').value, parseInt(el('count').value) || 25));
+el('t-stop').addEventListener('click', () => { if (SUITE){ SUITE.abort = true; } });
+function runSuite(kind, count, label){
+  if (SUITE) return;
+  count = Math.max(1, Math.min(500, count));
+  const realism = ST.servo === 'real', base = {path:ST.path, timing:ST.timing, duration:ST.duration, speed:ST.speed, obstacles:ST.obstacles.map(o => ({c:o.c.slice(), r:o.r})), demoModel:DEMOS[ST.demo] ? DEMOS[ST.demo].model : null, wristStart:[0,0,0,0], wristEnd:[0,0,0,0]};
+  if (base.timing === 'demo' && base.path !== 'learned') base.timing = 'smooth';
+  let tasks;
+  if (kind === 'random') tasks = C.randomTasks(count, 1000 + Math.floor(Math.random()*9000), base.obstacles).map(t => ({...base, ...t}));
+  else if (kind === 'sweep') tasks = C.sweepTasks(taskA()).map(t => ({...base, ...t}));
+  else if (kind === 'repeat') tasks = Array.from({length:count}, (_, i) => ({...base, A:taskA(), B:ST.B.slice(), wristEnd:ST.wristB.slice(), seed:101 + i}));
+  else tasks = C.randomTasks(count, 77 + Math.floor(Math.random()*999), base.obstacles).map(t => ({...base, ...t, path: base.obstacles.length ? 'avoid' : 'straight', timing:'fastest', speed:1}));
+  if (kind === 'repeat' && !realism) log('note: repeatability with the ideal servo is trivially exact; switch Servo to Realistic for a meaningful spread');
+  SUITE = {kind, tasks, i:0, rows:[], abort:false, t0:performance.now(), label: label || ({random:'Random A→B pairs', sweep:'Workspace sweep', repeat:'Repeatability', stress:'Stress, full speed'})[kind]};
+  TROWS.length = 0; el('t-body').innerHTML = ''; el('t-run').disabled = true; el('t-pill').className = 'pill mut'; el('t-pill').textContent = 'Running';
+  setTimeout(suiteChunk, 0);
+}
+function suiteChunk(){
+  const S = SUITE, until = performance.now() + 40, realism = ST.servo === 'real';
+  while (S.i < S.tasks.length && performance.now() < until && !S.abort){
+    const task = S.tasks[S.i], res = C.plan(task), ev = res.ok ? C.evaluate(res, realism) : {pass:false, reasons:res.issues, warnings:[], metrics:null};
+    const row = {n:S.i + 1, task, ok:res.ok, pass:ev.pass, reasons:ev.reasons, warnings:ev.warnings, m:ev.metrics, end: ev.metrics ? C.tipRel(res.traj.Xa[res.traj.Xa.length-1]) : null};
+    S.rows.push(row); TROWS.push(row); appendRow(row); S.i++;
+  }
+  el('t-bar').style.width = (S.i / S.tasks.length * 100).toFixed(1) + '%';
+  el('t-msg').textContent = `${S.label}: ${S.i} of ${S.tasks.length}`;
+  if (S.i < S.tasks.length && !S.abort){ setTimeout(suiteChunk, 0); return; }
+  summarise(S); SUITE = null; el('t-run').disabled = false;
+}
+function appendRow(r){
+  const tr = document.createElement('tr'); tr.className = 'click'; const m = r.m;
+  const res = r.pass ? '<span class="pill ok">PASS</span>' : r.ok ? `<span class="pill bad">FAIL</span> ${esc(r.reasons[0] || '')}` : `<span class="pill warn">INFEASIBLE</span> ${esc(r.reasons[0] || '')}`;
+  tr.innerHTML = `<td class="num">${r.n}</td><td class="k">${fp(r.task.A)}</td><td class="k">${fp(r.task.B)}</td>` +
+    (m ? `<td class="num">${m.duration.toFixed(2)} s</td><td class="num">${pct(m.peakSpeed)}</td><td class="num">${pct(m.worstTorquePct)}</td><td class="num">${(m.endErr*1000).toFixed(1)} µm</td><td class="num">${(m.track*1000).toFixed(0)} µm</td><td class="num">${ST.obstacles.length || r.task.obstacles.length ? m.clearance.toFixed(1) + ' mm' : '—'}</td>`
+       : '<td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>') + `<td>${res}</td>`;
+  tr.addEventListener('click', () => { ST.aFromArm = false; el('a-arm').checked = false; ST.A = r.task.A.slice(); ST.B = r.task.B.slice(); ST.path = r.task.path; ST.timing = r.task.timing; ST.speed = r.task.speed;
+    syncInputs(); replan(); document.querySelector('[data-tab="plan"]').click(); el('stage').scrollIntoView({behavior:'smooth', block:'nearest'}); });
+  el('t-body').appendChild(tr);
+}
+function summarise(S){
+  const rows = S.rows, ms = rows.filter(r => r.m).map(r => r.m), pass = rows.filter(r => r.pass).length, inf = rows.filter(r => !r.ok).length;
+  const mx = f => ms.length ? Math.max(...ms.map(f)) : 0, mn = f => ms.length ? Math.min(...ms.map(f)) : 0, avg = f => ms.length ? ms.reduce((s, m) => s + f(m), 0)/ms.length : 0;
+  const warn = rows.reduce((s, r) => s + (r.warnings ? r.warnings.length : 0), 0);
+  const items = [
+    ['Passed', `${pass} of ${rows.length}`], ['Infeasible (reported, not run)', String(inf)],
+    ['Worst final error', ms.length ? (mx(m => m.endErr)*1000).toFixed(1) + ' µm' : '—'], ['Worst tracking error', ms.length ? (mx(m => m.track)*1000).toFixed(0) + ' µm' : '—'],
+    ['Peak joint speed', ms.length ? pct(mx(m => m.peakSpeed)) : '—'], ['Peak joint acceleration', ms.length ? pct(mx(m => m.peakAcc)) : '—'],
+    ['Peak drive load', ms.length ? pct(mx(m => m.worstTorquePct)) + ' of rated' : '—'], ['Mean move time', ms.length ? avg(m => m.duration).toFixed(2) + ' s' : '—'],
+    ...(S.tasks[0] && S.tasks[0].obstacles.length ? [['Closest shaft approach', ms.length ? mn(m => m.clearance).toFixed(1) + ' mm' : '—']] : []),
+    ['Warnings (RMS load over motor rating)', String(warn)],
+  ];
+  if (S.kind === 'repeat' && rows.length){
+    const ends = rows.filter(r => r.end).map(r => r.end), c = ends.reduce((a, p) => C.add(a, C.mul(p, 1/ends.length)), [0,0,0]);
+    const spread = Math.max(...ends.map(p => C.nrm(C.sub(p, c)))), off = Math.max(...ends.map(p => C.nrm(C.sub(p, S.tasks[0].B))));
+    items.splice(2, 0, ['Spread of final positions', (spread*1000).toFixed(2) + ' µm'], ['Worst distance from B', (off*1000).toFixed(2) + ' µm']);
+  }
+  el('t-dl').innerHTML = items.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('');
+  const allOk = pass === rows.length - inf && rows.length > 0;
+  el('t-pill').className = 'pill ' + (S.abort ? 'warn' : allOk ? 'ok' : 'bad'); el('t-pill').textContent = S.abort ? 'Aborted' : allOk ? 'All feasible moves pass' : `${rows.length - inf - pass} failed`;
+  el('t-msg').textContent = `${S.label}: ${rows.length} moves in ${((performance.now() - S.t0)/1000).toFixed(1)} s` + (S.abort ? ' (aborted)' : '');
+  el('t-tiles').innerHTML = items.slice(0, 8).map(([a, b]) => `<div><b>${b}</b><span>${a}</span></div>`).join('');
+  el('t-cap').textContent = `${S.label} · ${({straight:'straight line', arc:'joint arc', avoid:'avoid keep-out zones', learned:'learned path'})[S.tasks[0] ? S.tasks[0].path : ST.path]} · ${({smooth:'smooth timing', fastest:'fastest timing', fixed:'fixed duration', demo:'demo pace'})[S.tasks[0] ? S.tasks[0].timing : ST.timing]} · ${ST.servo === 'real' ? 'realistic' : 'ideal'} servo · ${S.tasks[0] && S.tasks[0].obstacles.length ? S.tasks[0].obstacles.length + ' keep-out zone(s)' : 'no zones'}`;
+  log(`test ${S.kind}: ${pass}/${rows.length} pass, ${inf} infeasible`);
+}
+
+// ================================================================ I/O: command line, task JSON, CSV
+const HELP = [
+  'go X Y Z            plan from the arm to (X, Y, Z) mm and run it',
+  'B X Y Z             set the goal in mm from R',
+  'A X Y Z | A arm     set the start, or follow the arm',
+  'Bj YAW PITCH INS    set the goal as joints (rad, rad, mm)',
+  'wrist R P Y G       wrist at B in rad (roll, pitch, yaw, grip)',
+  'path straight|arc|avoid|learned [demo#]',
+  'time smooth|fastest|demo | time fixed S',
+  'speed PCT           cap at 25-100 % of joint limits',
+  'zone add X Y Z R | zone clear',
+  'plan | run | stop | home',
+  'test random N | test sweep | test repeat N | test stress N',
+  'get tip | get joints | get result',
+];
+el('cmdhelp').textContent = HELP.join('\n');
+function log(t, cls){ const L = el('log'), s = document.createElement('span'); if (cls) s.className = cls; s.textContent = t + '\n'; L.appendChild(s); while (L.childNodes.length > 200) L.removeChild(L.firstChild); L.scrollTop = L.scrollHeight; }
+function cmd(line){
+  line = line.trim(); if (!line) return; log('> ' + line, 'in');
+  const tk = line.split(/[\s,]+/), c = tk[0].toLowerCase(), nums = tk.slice(1).map(Number), need = n => { if (nums.length < n || nums.slice(0, n).some(isNaN)) throw new Error(`needs ${n} numbers`); return nums.slice(0, n); };
+  try {
+    if (c === 'go' || c === 'move'){ const p = need(3); const r = C.reach(p, ST.wristB); if (!r.ok && !C.reach(p, [ST.wristB[0],0,0]).ok) throw new Error('out of reach: ' + r.issues.join('; ')); ST.aFromArm = true; el('a-arm').checked = true; ST.B = p; syncInputs(); replan(); if (!PLAN.ok) throw new Error(EVAL.reasons[0]); run(); }
+    else if (c === 'b'){ ST.B = need(3); syncInputs(); replan(); log('B = ' + fp(ST.B) + ' mm · ' + (C.reach(ST.B, ST.wristB).ok ? 'reachable' : 'out of reach')); }
+    else if (c === 'bj'){ const j = need(3); ST.B = C.tipRel([j[0], j[1], j[2], ST.wristB[0], ST.wristB[1], ST.wristB[2]]); syncInputs(); replan(); log('B = ' + fp(ST.B) + ' mm'); }
+    else if (c === 'a'){ if ((tk[1]||'').toLowerCase() === 'arm'){ ST.aFromArm = true; el('a-arm').checked = true; } else { ST.A = need(3); ST.aFromArm = false; el('a-arm').checked = false; } syncInputs(); replan(); log('A = ' + fp(taskA()) + ' mm'); }
+    else if (c === 'wrist'){ const w = need(4); ST.wristB = w; syncInputs(); replan(); log('wrist at B = ' + w.map(v => v.toFixed(3)).join(', ') + ' rad'); }
+    else if (c === 'path'){ const p = (tk[1]||'').toLowerCase(); if (!['straight','arc','avoid','learned'].includes(p)) throw new Error('path must be straight, arc, avoid or learned');
+      ST.path = p; if (p === 'learned'){ if (tk[2]) { const i = parseInt(tk[2]) - 1; if (!DEMOS[i]) throw new Error('no demo ' + tk[2]); ST.demo = i; } } else if (ST.timing === 'demo') ST.timing = 'smooth';
+      syncInputs(); replan(); log('path = ' + p + (p === 'learned' ? ' (' + DEMOS[ST.demo].name + ')' : '')); }
+    else if (c === 'time'){ const t = (tk[1]||'').toLowerCase(); if (!['smooth','fastest','fixed','demo'].includes(t)) throw new Error('time must be smooth, fastest, fixed S or demo');
+      if (t === 'demo' && ST.path !== 'learned') throw new Error('demo pace needs path learned'); ST.timing = t; if (t === 'fixed'){ const s = parseFloat(tk[2]); if (isNaN(s)) throw new Error('time fixed needs seconds'); ST.duration = Math.max(0.1, s); }
+      syncInputs(); replan(); log('timing = ' + t + (t === 'fixed' ? ' ' + ST.duration + ' s' : '') + ' → ' + (PLAN.T ? PLAN.T.toFixed(2) + ' s' : 'no plan')); }
+    else if (c === 'speed'){ const v = need(1)[0]; const s = [25,50,75,100].reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a); ST.speed = s/100; syncInputs(); replan(); log('speed cap = ' + s + ' %'); }
+    else if (c === 'zone' || c === 'obstacle'){ const sub = (tk[1]||'').toLowerCase(); if (sub === 'clear'){ ST.obstacles = []; } else if (sub === 'add'){ const v = tk.slice(2).map(Number); if (v.length < 4 || v.some(isNaN)) throw new Error('zone add X Y Z R'); ST.obstacles.push({c:v.slice(0,3), r:Math.max(1, v[3])}); } else throw new Error('zone add X Y Z R | zone clear');
+      renderZones(); syncInputs(); replan(); log(ST.obstacles.length + ' zone(s)'); }
+    else if (c === 'plan'){ replan(); log(PLAN.ok ? `plan: ${PLAN.T.toFixed(2)} s, ${EVAL.pass ? 'PASS' : 'FAIL: ' + EVAL.reasons.join('; ')}` : 'plan: ' + EVAL.reasons.join('; '), PLAN.ok && EVAL.pass ? '' : 'err'); }
+    else if (c === 'run'){ run(); }
+    else if (c === 'stop'){ stopRun(); }
+    else if (c === 'home'){ goTo(C.tipRel(HOMEX), [0,0,0,0]); }
+    else if (c === 'test'){ const k = (tk[1]||'random').toLowerCase(); if (!['random','sweep','repeat','stress'].includes(k)) throw new Error('test random|sweep|repeat|stress'); runSuite(k, parseInt(tk[2]) || 25); log('test started; results in the Test tab and the test log'); }
+    else if (c === 'get'){ const w = (tk[1]||'tip').toLowerCase();
+      if (w === 'tip') log('tip = ' + fp(tipNow(), 3) + ' mm');
+      else if (w === 'joints') log('joints = ' + C.JN.map((n, i) => `${n} ${i === 2 ? ST.x[i].toFixed(3) + ' mm' : ST.x[i].toFixed(5) + ' rad'}`).join(', '));
+      else if (w === 'result') log(EVAL.metrics ? JSON.stringify(resultJSON().metrics) : 'no result: ' + EVAL.reasons.join('; '));
+      else throw new Error('get tip|joints|result'); }
+    else if (c === 'help' || c === '?'){ HELP.forEach(h => log('  ' + h)); }
+    else throw new Error('unknown command, type help');
+  } catch(e){ log('error: ' + e.message, 'err'); }
+}
+el('cmd-send').addEventListener('click', () => { cmd(el('cmd').value); el('cmd').value = ''; });
+el('cmd').addEventListener('keydown', e => { if (e.key === 'Enter'){ cmd(el('cmd').value); el('cmd').value = ''; } });
+function taskJSON(){
+  return { frame:'mm from R (the incision): +X right, +Y up out of the body, +Z toward the viewer', A:taskA().map(v => +v.toFixed(3)), B:ST.B.map(v => +v.toFixed(3)), startFromArm:ST.aFromArm,
+    path:ST.path, timing:ST.timing, duration:ST.duration, speed:ST.speed,
+    wristB:{roll:+ST.wristB[0].toFixed(4), wristPitch:+ST.wristB[1].toFixed(4), wristYaw:+ST.wristB[2].toFixed(4), grip:+ST.wristB[3].toFixed(4)},
+    obstacles:ST.obstacles.map(o => ({c:o.c.map(v => +v.toFixed(2)), r:o.r})), demo:DEMOS[ST.demo] ? DEMOS[ST.demo].name : null, servo:ST.servo === 'real' ? 'realistic' : 'ideal' };
+}
+function applyJSON(j){
+  const v3 = (a, n) => { if (!Array.isArray(a) || a.length !== 3 || a.some(x => typeof x !== 'number' || !isFinite(x))) throw new Error(n + ' must be [x, y, z] in mm'); return a.slice(); };
+  if (j.B !== undefined) ST.B = v3(j.B, 'B');
+  if (j.startFromArm !== undefined) ST.aFromArm = !!j.startFromArm;
+  if (j.A !== undefined && !ST.aFromArm) ST.A = v3(j.A, 'A');
+  if (j.path !== undefined){ if (!['straight','arc','avoid','learned'].includes(j.path)) throw new Error('path must be straight, arc, avoid or learned'); ST.path = j.path; }
+  if (j.timing !== undefined){ if (!['smooth','fastest','fixed','demo'].includes(j.timing)) throw new Error('timing must be smooth, fastest, fixed or demo'); ST.timing = j.timing; }
+  if (typeof j.duration === 'number') ST.duration = Math.max(0.1, j.duration);
+  if (typeof j.speed === 'number') ST.speed = [0.25,0.5,0.75,1].reduce((a, b) => Math.abs(b - j.speed) < Math.abs(a - j.speed) ? b : a);
+  if (j.wristB) ST.wristB = [j.wristB.roll||0, j.wristB.wristPitch||0, j.wristB.wristYaw||0, j.wristB.grip||0];
+  if (Array.isArray(j.obstacles)) ST.obstacles = j.obstacles.map((o, i) => ({c:v3(o.c, `obstacles[${i}].c`), r:Math.max(1, +o.r || 5)}));
+  if (j.demo){ const i = DEMOS.findIndex(d => d.name === j.demo); if (i < 0) throw new Error('no demonstration named ' + j.demo); ST.demo = i; }
+  if (j.servo) ST.servo = j.servo === 'ideal' ? 'ideal' : 'real';
+  if (ST.timing === 'demo' && ST.path !== 'learned') ST.timing = 'smooth';
+  el('a-arm').checked = ST.aFromArm;
+}
+el('json-apply').addEventListener('click', () => { try { applyJSON(JSON.parse(el('taskjson').value)); el('json-msg').textContent = 'Applied.'; el('json-msg').style.color = ''; syncInputs(); replan(); }
+  catch(e){ el('json-msg').textContent = e.message; el('json-msg').style.color = 'var(--bad)'; } });
+function copyText(text, msgEl, label){
+  const done = () => { el(msgEl).textContent = label + ' copied.'; };
+  const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch(e){ el(msgEl).textContent = 'Select the text and copy it.'; } ta.remove(); };
+  try { navigator.clipboard.writeText(text).then(done, fallback); } catch(e){ fallback(); }
+}
+el('json-copy').addEventListener('click', () => copyText(el('taskjson').value, 'json-msg', 'Task JSON'));
+function trajectoryCSV(){
+  if (!EVAL.metrics) return '';
+  const tr = PLAN.traj, head = 't_s,x_mm,y_mm,z_mm,yaw_rad,pitch_rad,insertion_mm,roll_rad,wrist_pitch_rad,wrist_yaw_rad,grip_rad,yaw_load_Nm,pitch_load_Nm,insertion_load_N,tracking_error_um';
+  const rows = tr.t.map((t, i) => [t.toFixed(3), ...tr.P[i].map(v => v.toFixed(4)), ...tr.X[i].map((v, j) => v.toFixed(j === 2 ? 4 : 6)), ...tr.TAU[i].map(v => v.toFixed(3)), (tr.ERR[i]*1000).toFixed(2)].join(','));
+  return head + '\n' + rows.join('\n');
+}
+function resultJSON(){
+  const m = EVAL.metrics;
+  return { task:taskJSON(), pass:EVAL.pass, reasons:EVAL.reasons, warnings:EVAL.warnings, notes:PLAN.notes,
+    metrics: m ? { duration_s:+m.duration.toFixed(4), length_mm:+m.length.toFixed(3), peakSpeed:+m.peakSpeed.toFixed(4), peakSpeedJoint:m.peakSpeedJoint, peakAcc:+m.peakAcc.toFixed(4), peakAccJoint:m.peakAccJoint,
+      torque:{yaw_Nm:+m.torque[0].toFixed(3), pitch_Nm:+m.torque[1].toFixed(3), insertion_N:+m.torque[2].toFixed(3)}, endErr_mm:+m.endErr.toExponential(3), track_mm:+m.track.toExponential(3),
+      clearance_mm: isFinite(m.clearance) ? +m.clearance.toFixed(3) : null, rcm_mm:+m.rcm.toExponential(2), planMs:+m.planMs.toFixed(1) } : null };
+}
+el('csv-copy').addEventListener('click', () => { const t = trajectoryCSV(); if (!t){ el('out-msg').textContent = 'No trajectory to copy.'; return; } copyText(t, 'out-msg', `${t.split('\n').length - 1} rows of CSV`); });
+el('res-copy').addEventListener('click', () => copyText(JSON.stringify(resultJSON(), null, 2), 'out-msg', 'Result JSON'));
+function renderOutputs(){ const t = trajectoryCSV(); el('csvprev').textContent = t ? t.split('\n').slice(0, 7).join('\n') + `\n… ${t.split('\n').length - 1} rows` : 'No trajectory.';
+  if (document.activeElement !== el('taskjson')) el('taskjson').value = JSON.stringify(taskJSON(), null, 2); }
+
+// ================================================================ pick B in the view (on the horizontal plane at B's depth)
+let picking = false, downXY = null;
+el('b-pick').addEventListener('click', () => { picking = !picking; el('b-pick').classList.toggle('on', picking); canvas.classList.toggle('pick', picking); pickPlane.visible = picking;
+  el('b-pick').textContent = picking ? 'Click the view…' : 'Pick in view'; });
+canvas.addEventListener('pointerdown', e => { downXY = [e.clientX, e.clientY]; });
+canvas.addEventListener('pointerup', e => {
+  if (!picking || !downXY || Math.hypot(e.clientX - downXY[0], e.clientY - downXY[1]) > 5) return;
+  const r = canvas.getBoundingClientRect(), ndc = new THREE.Vector2((e.clientX - r.left)/r.width*2 - 1, -(e.clientY - r.top)/r.height*2 + 1);
+  const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, camera);
+  const hit = new THREE.Vector3(), plane = new THREE.Plane(V3(0,1,0), -ST.B[1]);
+  if (ray.ray.intersectPlane(plane, hit)){ ST.B = [Math.round(hit.x*2)/2, ST.B[1], Math.round((hit.z - MT.ZI)*2)/2]; syncInputs(); schedule(0); log('B picked: ' + fp(ST.B)); }
+  picking = false; el('b-pick').classList.remove('on'); canvas.classList.remove('pick'); pickPlane.visible = false; el('b-pick').textContent = 'Pick in view';
+});
+
+// ================================================================ tabs, limits table, tags, theme
+document.querySelectorAll('[role=tab]').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('[role=tab]').forEach(x => x.setAttribute('aria-selected', x === t));
+  document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== t.dataset.tab);
+}));
+el('limits').innerHTML = C.JN.map((n, j) => {
+  const lin = j === 2, f = v => lin ? v.toFixed(0) + ' mm' : v.toFixed(3) + ' rad';
+  const drive = j < 3 ? `${['CSF-17-100 strain-wave gear','SHG-17-100 hollow strain-wave gear, 2:1 belt','SFU1204 ball screw, 4 mm lead'][j]} · rated ${C.DRIVE.rated[j]} ${C.DRIVE.unit[j]}, peak ${C.DRIVE.peak[j]} ${C.DRIVE.unit[j]}` : 'Instrument drive (cable), 30:1';
+  return `<tr><td>${n}</td><td class="k">${f(C.LO[j])} to ${f(C.HI[j])}</td><td class="num">${lin ? C.VLIM[j].toFixed(0) + ' mm/s' : C.VLIM[j].toFixed(3) + ' rad/s'}</td><td class="num">${lin ? C.ALIM[j].toFixed(0) + ' mm/s²' : C.ALIM[j].toFixed(2) + ' rad/s²'}</td><td>${drive}</td></tr>`;
+}).join('');
+const TAGS = [];
+function mkTag(cls, text){ const d = document.createElement('span'); d.className = 'tag ' + cls; d.textContent = text; el('tags').appendChild(d); return d; }
+AXTAGS.forEach(t => { t.el = mkTag(t.cls, t.text); TAGS.push(t); });
+const tagA = mkTag('a', 'A'), tagB = mkTag('b', 'B');
+let zoneTags = [];
+function placeTag(e, p, w, h){ const v = p.clone().project(camera); const on = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05; e.hidden = !on; if (on){ e.style.left = ((v.x+1)/2*w) + 'px'; e.style.top = ((1-v.y)/2*h) + 'px'; } }
+function readTheme(){
+  if (scene) scene.background = new THREE.Color(css('--scene') || '#e4e9ec');
+  const set = (mat, v) => { const c = css(v); if (c) mat.color.set(c); };
+  set(axMat.x, '--x'); set(axMat.y, '--y'); set(axMat.z, '--z'); set(coneMat.x, '--x'); set(coneMat.y, '--y'); set(coneMat.z, '--z');
+  set(bDot.material, '--accent'); set(pvDot.material, '--accent'); set(aDot.material, '--steel'); set(envMat, '--env');
+  GUIDES.A.concat(GUIDES.B).forEach((l, i) => set(l.material, ['--x','--z','--y'][i % 3]));
+  if (PLAN) drawPlan();
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readTheme);
+new MutationObserver(readTheme).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+
+// ================================================================ main loop
+let last = performance.now();
+function step(dt){
+  jogStep(dt); recordStep();
+  if (RUN){
+    const seg = RUN.segs[RUN.k], dur = (seg.tr.Xa.length - 1) * C.DT;
+    RUN.t += dt; const t = Math.min(RUN.t, dur);
+    ST.x = sampleTr(seg.tr, t);
+    if (seg.kind === 'move' && CD){ const x = CH[0].geo ? CH[0].geo.X(Math.min(t, CD.t[CD.t.length-1])) : -10; CH.forEach(c => { if (c.play){ c.play.setAttribute('x1', x); c.play.setAttribute('x2', x); } }); }
+    if (RUN.t >= dur){ RUN.k++; RUN.t = 0;
+      if (RUN.k >= RUN.segs.length){ const fin = seg; RUN = null; el('run').disabled = false; lastRun = fin;
+        const e = C.nrm(C.sub(C.tipRel(ST.x), fin.tr.P[fin.tr.P.length-1]));
+        flashState(`Arrived · final error ${(e*1000).toFixed(1)} µm`); log(`arrived at ${fp(C.tipRel(ST.x), 3)} mm, error ${(e*1000).toFixed(2)} µm`);
+        CH.forEach(c => { if (c.play){ c.play.setAttribute('x1', -10); c.play.setAttribute('x2', -10); } });
+        if (fin.kind === 'move' && PLAN){ PLAN.done = true; TRANSIT = null; if (ST.aFromArm === false){ ST.aFromArm = true; el('a-arm').checked = true; } syncInputs(); renderResult(); drawPlan(); }
+        else { syncInputs(); schedule(0); } } }
+  }
+  // trail
+  if (RUN){ const p = W(C.tipRel(ST.x)); if (trCount === 0 || V3(trPos[(trCount-1)*3], trPos[(trCount-1)*3+1], trPos[(trCount-1)*3+2]).distanceTo(p) > 0.4){
+    if (trCount >= TRN){ trPos.copyWithin(0, 3); trCount = TRN - 1; } trPos.set([p.x, p.y, p.z], trCount*3); trCount++; trGeo.attributes.position.needsUpdate = true; trGeo.setDrawRange(0, trCount); } }
+}
+function hud(){
+  const p = C.tipRel(ST.x), x = ST.x;
+  el('r-x').textContent = sg(p[0], 2); el('r-y').textContent = sg(p[1], 2); el('r-z').textContent = sg(p[2], 2);
+  el('r-j').textContent = `yaw ${sg(x[0], 4)} rad · pitch ${sg(x[1], 4)} rad · insertion ${x[2].toFixed(2)} mm`;
+  el('r-w').textContent = `roll ${sg(x[3], 3)} · wrist ${sg(x[4], 3)} / ${sg(x[5], 3)} · grip ${x[6].toFixed(3)} rad`;
+  if (performance.now() > flashUntil){
+    if (RUN){ const seg = RUN.segs[RUN.k], Tm = seg.tr.t[seg.tr.t.length-1]; el('state').textContent = RUN.t > Tm ? 'Settling' : `${seg.kind === 'transit' ? 'Moving to A' : seg.kind === 'demo' ? 'Replaying demo' : 'Moving'} · ${RUN.t.toFixed(2)} / ${Tm.toFixed(2)} s`; el('state').style.color = ''; }
+    else if (REC) { el('state').textContent = 'Recording'; el('state').style.color = 'var(--accent)'; }
+  }
+}
+function draw(){
+  drawPose(ST.x);
+  // ghost: at the previewed instant, else at B's final pose
+  let gx = null;
+  if (!RUN && PLAN && PLAN.traj){ if (previewT != null){ const i = Math.min(PLAN.traj.X.length - 1, Math.round(previewT / C.DT)); gx = PLAN.traj.X[i]; pvDot.visible = true; pvDot.position.copy(W(PLAN.traj.P[i])); el('scrubt').textContent = PLAN.traj.t[i].toFixed(2) + ' s'; }
+    else { gx = endPose(); pvDot.visible = false; el('scrubt').textContent = PLAN.T.toFixed(2) + ' s'; }
+    if (gx && C.nrm(C.sub(C.tipRel(gx), C.tipRel(ST.x))) < 0.5 && previewT == null) gx = null; }
+  else { pvDot.visible = false; if (!PLAN || !PLAN.traj) el('scrubt').textContent = '— s'; }
+  drawGhost(gx);
+  if (!renderer) return;
+  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
+  if (canvas.width !== Math.round(w*pr) || canvas.height !== Math.round(h*pr)){ renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); if (!userMoved) fitView(); }
+  scene.updateMatrixWorld(true); renderer.render(scene, camera);
+  const showT = el('ly-tags').checked, showAx = el('ly-axes').checked;
+  TAGS.forEach(t => { placeTag(t.el, t.p, w, h); if (!showT || (!showAx && t.grp === 'ticks')) t.el.hidden = true; });
+  const A = RUN ? RUN.A : taskA();
+  tagA.textContent = 'A  ' + fp(A); placeTag(tagA, W(A), w, h);
+  tagB.textContent = 'B  ' + fp(ST.B); placeTag(tagB, W(ST.B), w, h); if (!showT){ tagA.hidden = tagB.hidden = true; }
+  while (zoneTags.length < ST.obstacles.length) zoneTags.push(mkTag('k', ''));
+  zoneTags.forEach((z, i) => { const o = ST.obstacles[i]; if (!o){ z.hidden = true; return; } z.textContent = 'K' + (i+1); placeTag(z, W([o.c[0], o.c[1] - o.r, o.c[2]]), w, h); if (!showT) z.hidden = true; });
+}
+function loop(now){
+  const dt = Math.min(0.05, (now - last)/1000); last = now;
+  step(dt); controls.update(); hud(); draw();
+  requestAnimationFrame(loop);
+}
+
+// ================================================================ boot
+setCoord('xyz'); readTheme(); replan(); applyLayers(); fitView();
+log('Motion Lab ready. Type help for commands.');
+log('Units: mm from R (+X right, +Y up, +Z toward you); angles in rad.');
+setTimeout(() => runSuite('random', 12, 'Sample run on load: 12 random moves'), 600);
+window.__lab = { C, ST, DEMOS, replan, run, stopRun, step, draw, cmd, runSuite, applyJSON, taskJSON, resultJSON, trajectoryCSV, get plan(){ return PLAN; }, get ev(){ return EVAL; },
+  get running(){ return !!RUN; }, get suite(){ return SUITE; }, get rows(){ return TROWS; }, jog: v => { JOG.btn = v; }, rec: () => el('rec').click(), setPreview };
+requestAnimationFrame(loop);
+})();
+</script>
